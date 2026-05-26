@@ -110,22 +110,32 @@ def run_wheelspin(ctx, target_count):
             return False
             
         # 此时刚才的 ctx.game_click(pos_target) 已经点中了车，等待右下角菜单弹出
-        time.sleep(1.2)
-        
-        # 【关键细节】：先把鼠标移开，防止游戏里的鼠标悬停高亮遮挡了按钮的本来面目，导致识别失败
-        ctx.move_to_game_coord(5, 5)
-        time.sleep(0.3)
-        
+        time.sleep(0.5)
+                
         ctx.log("识别上车选项...")
         # 【核心修改】：使用 wait_for_any_image，传入包含两张图片的列表
         pos_shangche = ctx.vision.wait_for_any_image(
             ["rc_normal.png", "rc_hover.png"], 
             region=ctx.regions["全界面"], 
             threshold=0.65, 
-            timeout=4.0, 
+            timeout=2.0, 
             interval=0.2,
             fast_mode=True
         )
+
+        # 2. 如果没找到，说明刚才真的只是选中了车，此时我们才补按 Enter
+        if not pos_shangche:
+            ctx.log("菜单未弹出，补按 Enter 键唤出菜单...")
+            input_driver.hw_press("enter")
+            time.sleep(1.0)
+            pos_shangche = ctx.vision.wait_for_any_image(
+                ["rc_normal.png", "rc_hover.png"], 
+                region=ctx.regions["全界面"], 
+                threshold=0.65, 
+                timeout=2.0, 
+                interval=0.2,
+                fast_mode=True
+            )
         
         if pos_shangche:
             ctx.log("点击上车选项")
@@ -179,13 +189,14 @@ def run_wheelspin(ctx, target_count):
             return False
 
         ctx.game_click(pos_cls)
-        time.sleep(1.5)
+        ctx.log("进入熟练度界面...")
+        time.sleep(1.0)
 
         pos_exp = ctx.vision.wait_for_any_image(
             ["EXPwU.png"],
             region=ctx.regions["左"],
             threshold=0.75,
-            timeout=2,
+            timeout=1,
             interval=0.3,
             fast_mode=True
         )
