@@ -25,9 +25,16 @@ jobs:
         pip install -r requirements.txt
 
     - name: 自动同步 Git Tag 到 config.py
+      shell: python
       run: |
-        python -c "import re; tag='${{ github.ref_name }}'.replace('v', ''); content=open('config.py', encoding='utf-8').read(); open('config.py', 'w', encoding='utf-8').write(re.sub(r'CURRENT_VERSION\s*=\s*[\'\"].*?[\'\"]', f'CURRENT_VERSION = \"{tag}\"', content))"
-
+        import re
+        tag = '${{ github.ref_name }}'.replace('v', '')
+        with open('config.py', 'r', encoding='utf-8') as f:
+            content = f.read()
+        new_content = re.sub(r'CURRENT_VERSION\s*=\s*[\'"].*?[\'"]', f'CURRENT_VERSION = "{tag}"', content)
+        with open('config.py', 'w', encoding='utf-8') as f:
+            f.write(new_content)
+            
     - name: 执行打包脚本 (build.bat)
       run: |
         call build.bat
