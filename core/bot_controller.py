@@ -159,7 +159,7 @@ class BotController:
         self.current_thread.start()
 
     def _run_pipeline_loop(self, start_step: str):
-        import logic.race
+        from logic.race_task import RaceTask
         import logic.wheelspin
         import logic.sell
         from logic.buy_task import BuyCarTask
@@ -178,7 +178,7 @@ class BotController:
             step_success = False
 
             try:
-                if step_name == "race": step_success = logic.race.run_race(self, int(self.config.get("race_count", 99)), self.config.get("share_code", ""))
+                if step_name == "race": step_success = RaceTask(self, int(self.config.get("race_count", 99))).run()
                 elif step_name == "buy": step_success = BuyCarTask(self, int(self.config.get("buy_count", 30))).run()
                 elif step_name == "cj": step_success = logic.wheelspin.run_wheelspin(self, int(self.config.get("cj_count", 30)))
                 elif step_name == "sell": step_success = logic.sell.run_sell(self, int(self.config.get("sc_count", 30)))

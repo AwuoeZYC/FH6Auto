@@ -15,12 +15,12 @@ NODE_IDENTIFIERS = {
 
     # --- 买车支线 ---
     "scene_coll_journal":    {"mode": "ANY", "images": ["btn_master_explorer.png"]},
-    "scene_master_explorer": {"mode": "ALL", "images": ["text_master_explorer.png", "text_sorted.png"]}, # AND
-    "scene_car_collection":  {"mode": "ALL", "images": ["text_car_collection_statement.png", "icon_car_collection_beige.png"]},
+    "scene_master_explorer": {"mode": "ALL", "images": ["title_master_explorer.png", "text_sorted.png"]}, # AND
+    "scene_car_collection":  {"mode": "ALL", "images": ["icon_car_collection_beige.png", "text_car_collection_statement.png"]},
 
     # --- 跑图支线 ---
     "scene_eventlab":   {"mode": "ANY", "images": ["btn_play_event.png"]}, # 蓝图页
-    "scene_play_event": {"mode": "ALL", "images": ["title_event.png", "text_view_event_info.png"]}, # 赛事准备页
+    "scene_play_event": {"mode": "ANY", "images": ["title_event.png"]}, # 赛事页
 }
 
 # ==========================================
