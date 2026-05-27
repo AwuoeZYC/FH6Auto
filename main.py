@@ -1,18 +1,23 @@
 import sys
 import ctypes
-from gui.main_window import FH_UltimateBot
 
-# 【极其关键】：必须在任何 UI 库导入之前设置 DPI 感知，保证高分辨率屏幕不模糊
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Win 8.1+
-except Exception:
+def setup_dpi_awareness():
+    """设置进程 DPI 感知，必须在任何 GUI 库加载前调用"""
     try:
-        ctypes.windll.user32.SetProcessDPIAware()  # Win Vista+
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # Win 8.1+
     except Exception:
-        pass
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()  # Win Vista+
+        except Exception:
+            pass
 
 if __name__ == "__main__":
-    print("正在启动 FH6Auto 自动化核心...")
+    setup_dpi_awareness()
+    
+    # 必须在 DPI 设置之后导入 UI 相关模块
+    from gui.main_window import FH_UltimateBot
+
+    print("启动 FH6Auto 自动化核心...")
     try:
         app = FH_UltimateBot()
         app.mainloop()
@@ -20,4 +25,4 @@ if __name__ == "__main__":
         print("程序已手动退出。")
     except Exception as e:
         print(f"程序遭遇严重崩溃: {e}")
-        input("按回车键退出...")
+        sys.exit(1)
