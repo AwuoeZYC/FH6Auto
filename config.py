@@ -5,7 +5,7 @@ import shutil
 # ==========================================
 # --- 版本与基础配置 ---
 # ==========================================
-CURRENT_VERSION = "0.1.0"
+CURRENT_VERSION = "dev"
 
 def get_app_dir():
     if getattr(sys, "frozen", False):

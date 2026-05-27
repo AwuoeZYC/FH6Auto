@@ -6,6 +6,8 @@ import webbrowser
 import requests
 import customtkinter as ctk
 from PIL import Image
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 必须显式关闭组件自带的 DPI 缩放，由主入口接管绝对坐标控制
 ctk.deactivate_automatic_dpi_awareness()
@@ -653,14 +655,14 @@ class FH_UltimateBot(ctk.CTk):
         self.update_win = ctk.CTkToplevel(self)
         self.update_win.title("检查更新")
         self.update_win.geometry("340x220")
-        self.update_win.attributes("-topmost", True)
         self.update_win.resizable(False, False)
+        self.update_win.transient(self)
 
         self.update_win.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() - 340) // 2
         y = self.winfo_y() + (self.winfo_height() - 220) // 2
         self.update_win.geometry(f"+{x}+{y}")
-
+        
         ctk.CTkLabel(self.update_win, text="FH6Auto 自动化更新", font=ctk.CTkFont(weight="bold", size=18), text_color="#3498DB").pack(pady=(25, 10))
         
         self.lbl_version = ctk.CTkLabel(self.update_win, text=f"当前版本: v{CURRENT_VERSION}", text_color="gray", font=ctk.CTkFont(size=13))
@@ -671,7 +673,7 @@ class FH_UltimateBot(ctk.CTk):
             try:
                 # 换成你自己的 Github 仓库 API
                 api_url = "https://api.github.com/repos/AwuoeZYC/FH6Auto/releases/latest"
-                resp = requests.get(api_url, timeout=5)
+                resp = requests.get(api_url, timeout=5, verify=False)
                 if resp.status_code == 200:
                     data = resp.json()
                     remote_ver = data.get("tag_name", "v0.0.0").replace("v", "")
@@ -701,7 +703,9 @@ class FH_UltimateBot(ctk.CTk):
                 else:
                     self.ui_call(self.lbl_version.configure, text="检查更新失败：网络请求被拒", text_color="#DA3633")
             except Exception as e:
-                self.ui_call(self.lbl_version.configure, text="检查更新失败: 网络连接异常", text_color="#DA3633")
+                error_msg = f"异常: {type(e).__name__} - {str(e)}"
+                print(f"【DEBUG 更新报错】 {error_msg}")
+                self.ui_call(self.lbl_version.configure, text=error_msg[:30], text_color="#DA3633")
 
         btn_frame = ctk.CTkFrame(self.update_win, fg_color="transparent")
         btn_frame.pack(pady=20)
@@ -714,14 +718,14 @@ class FH_UltimateBot(ctk.CTk):
         dl_win = ctk.CTkToplevel(self)
         dl_win.title(f"正在下载 v{version}")
         dl_win.geometry("400x160")
-        dl_win.attributes("-topmost", True)
         dl_win.resizable(False, False)
+        dl_win.transient(self)
         
         dl_win.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() - 400) // 2
         y = self.winfo_y() + (self.winfo_height() - 160) // 2
         dl_win.geometry(f"+{x}+{y}")
-
+        
         lbl_status = ctk.CTkLabel(dl_win, text="正在连接节点...", font=ctk.CTkFont(weight="bold"))
         lbl_status.pack(pady=(20, 5))
 
@@ -746,7 +750,7 @@ class FH_UltimateBot(ctk.CTk):
                     return
 
                 tmp_file_path = current_exe_path + ".tmp"
-                resp = requests.get(url, stream=True, timeout=10)
+                resp = requests.get(url, stream=True, timeout=10, verify=False)
                 resp.raise_for_status()
                 total_size = int(resp.headers.get('content-length', 0))
                 
