@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import threading
@@ -788,8 +789,10 @@ class FH_UltimateBot(ctk.CTk):
                 else:
                     self.ui_call(messagebox.showerror, "错误", "缺少更新组件(Updater.exe)，无法热替换！")
 
-            except Exception:
+            except Exception as e:
+                print(f"【下载诊断】 {e}")
                 if not cancel_flag["is_cancelled"]:
-                    self.ui_call(lbl_status.configure, text="下载中断：网络异常", text_color="#DA3633")
+                    # 直接把真实的错误类型打在下载窗口上
+                    self.ui_call(lbl_status.configure, text=f"报错: {type(e).__name__} {str(e)[:20]}", text_color="#DA3633")
 
         threading.Thread(target=download_thread, daemon=True).start()
