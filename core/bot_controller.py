@@ -6,6 +6,7 @@ from core.navigator import SceneNavigator
 from core.router import UIRouter    # <--- 新增：引入路由引擎
 from utils.game_monitor import GameMonitor
 import os
+import core.pipeline_manager
 
 class BotController:
     def __init__(self, search_dirs: list, base_res: tuple):
@@ -159,64 +160,20 @@ class BotController:
         self.current_thread.start()
 
     def _run_pipeline_loop(self, start_step: str):
+        from core.pipeline_manager import PipelineManager
         from logic.race_task import RaceTask
-        import logic.wheelspin
-        import logic.sell
         from logic.buy_task import BuyCarTask
+        
+        pipeline = PipelineManager(self)
+        
+        # 将所有的控制参数完整地绑定到对应的任务槽位上
+        pipeline.register_task("race", RaceTask, "race_count", "chk_1", "next_1")
+        pipeline.register_task("buy", BuyCarTask, "buy_count", "chk_2", "next_2")
+        # pipeline.register_task("cj", WheelspinTask, "cj_count", "chk_3", "next_3")
+        # pipeline.register_task("sell", SellTask, "sc_count", "chk_4", "next_4")
 
-        steps = ["race", "buy", "cj", "sell"]
-        try:
-            curr_idx = steps.index(start_step)
-        except ValueError:
-            curr_idx = 0
-
-        if self.ui_loop_callback:
-            self.ui_loop_callback(self.global_loop_current, self.global_loop_total)
-
-        while self._is_running:
-            step_name = steps[curr_idx]
-            step_success = False
-
-            try:
-                if step_name == "race": step_success = RaceTask(self, int(self.config.get("race_count", 99))).run()
-                elif step_name == "buy": step_success = BuyCarTask(self, int(self.config.get("buy_count", 30))).run()
-                elif step_name == "cj": step_success = logic.wheelspin.run_wheelspin(self, int(self.config.get("cj_count", 30)))
-                elif step_name == "sell": step_success = logic.sell.run_sell(self, int(self.config.get("sc_count", 30)))
-            except Exception as e:
-                self.log(f"🔥 执行模块 {step_name} 时遭遇严重崩溃: {e}")
-
-            if not self._is_running: break
-
-            if not step_success:
-                self.log("⚠️ 模块返回失败，尝试执行雷达脱困重置...")
-                if self.navigator.recover_to_safe_state():
-                    self.log("✅ 成功脱困，尝试重新执行当前步骤。")
-                    continue
-                else:
-                    self.log("🚨 无法通过常规手段脱困，流水线终止。")
-                    break
-
-            next_idx = curr_idx + 1
-            if curr_idx == 0: next_idx = int(self.config.get("next_1", 2)) - 1 if self.config.get("chk_1") else -1
-            elif curr_idx == 1: next_idx = int(self.config.get("next_2", 3)) - 1 if self.config.get("chk_2") else -1
-            elif curr_idx == 2: next_idx = int(self.config.get("next_3", 4)) - 1 if self.config.get("chk_3") else -1
-            elif curr_idx == 3: next_idx = int(self.config.get("next_4", 1)) - 1 if self.config.get("chk_4") else -1
-
-            if next_idx < 0:
-                self.log("设置了后续不继续执行，任务正常结束。")
-                break
-
-            if next_idx <= curr_idx:
-                self.global_loop_current += 1
-                if self.global_loop_current > self.global_loop_total:
-                    self.log("🎉 已达到设定的总大循环次数，全自动化流程圆满结束。")
-                    break
-                if self.ui_loop_callback:
-                    self.ui_loop_callback(self.global_loop_current, self.global_loop_total)
-                self.log(f"🔄 开启新一轮大循环 ({self.global_loop_current}/{self.global_loop_total})")
-
-            curr_idx = next_idx
-
+        pipeline.run_pipeline(start_step)
+        
         self.stop_all()
 
     def stop_all(self):

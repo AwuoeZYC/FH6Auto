@@ -14,6 +14,7 @@ class BaseTask:
         self.current_state = None
         self.state_start_time = 0.0
         self.task_start_time = 0.0
+        self.action_executed = False  # 动作执行锁，保证进入新状态时触发动作只执行一次
         
         self.global_timeout = 3600  
         self.state_timeout = 45     
@@ -76,6 +77,7 @@ class BaseTask:
         if self.current_state != new_state:
             self.current_state = new_state
             self.state_start_time = time.monotonic()
+            self.action_executed = False  # 状态切换时自动复位锁
 
     @property
     def time_in_state(self) -> float:
@@ -83,9 +85,19 @@ class BaseTask:
         return time.monotonic() - self.state_start_time
 
     def update_progress(self, task_name: str):
-        # 解耦 UI 直接调用，交由上下文分发
-        if hasattr(self.ctx, "update_running_ui"):
+        # 【修改】：不再使用 hasattr 猜 UI，而是通过 ctx 统一派发事件
+        # 这要求 BotController 提供 update_running_ui 方法（目前已存在）
+        if self.ctx and hasattr(self.ctx, "update_running_ui"):
             self.ctx.update_running_ui(task_name, self.current_count, self.target_count)
+
+    def wait_in_state(self, wait_seconds: float) -> bool:
+        """
+        【新增】：非阻塞等待判定器。
+        用法: if not self.wait_in_state(1.5): return None
+        它允许当前状态函数立即返回，使得主循环继续保持呼吸（监听 F8），
+        直到在当前状态停留的时间超过 wait_seconds 后，才放行执行后续代码。
+        """
+        return self.time_in_state >= wait_seconds
 
     def log_throttled(self, msg: str, interval: float = 3.0):
         """防刷屏日志限流器"""

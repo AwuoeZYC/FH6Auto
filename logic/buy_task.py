@@ -42,35 +42,50 @@ class BuyCarTask(BaseTask):
 
     # ================= 纯粹的买车业务阶段 =================
     def state_start_brand_search(self):
-        self.log_throttled("按 Backspace 展开制造商列表...")
-        input_driver.hw_press("backspace")
-        time.sleep(1.0) 
-        self.change_state("find_brand_subaru")
+        # 保证单次进入状态只按一次键
+        if not self.action_executed:
+            self.log_throttled("按 Backspace 展开制造商列表...")
+            input_driver.hw_press("backspace")
+            self.action_executed = True
+
+        # 非阻塞等待 1 秒后流转状态
+        if self.wait_in_state(1.0):
+            self.change_state("find_brand_subaru")
 
     def state_find_brand_subaru(self):
         pos = self.ctx.find_image("brand_Subaru.png")
         if pos:
-            self.ctx.log("✅ 找到斯巴鲁品牌！点击进入...")
-            self.ctx.game_click(pos)
-            time.sleep(1.0)
-            self.change_state("find_car_22b")
+            if not self.action_executed:
+                self.ctx.log("✅ 找到斯巴鲁品牌！点击进入...")
+                self.ctx.game_click(pos)
+                self.action_executed = True
+                
+            if self.wait_in_state(1.0):
+                self.change_state("find_car_22b")
         else:
-            self.log_throttled("未看到斯巴鲁，向上滚动...")
-            input_driver.hw_press("up")
-            time.sleep(0.2)
+            # 配合 log_throttled，即便主循环 0.05s 一次，日志和按键也能被规范限流
+            if self.time_in_state > 0.2 and not self.action_executed:
+                self.log_throttled("未看到斯巴鲁，向上滚动...")
+                input_driver.hw_press("up")
+                # 这里不使用 change_state，而是手动重置计时器，让循环重新判定 0.2s 延时
+                self.state_start_time = time.monotonic() 
 
     def state_find_car_22b(self):
         pos = self.ctx.find_image("car_Subaru_22B_collection.png")
         if pos:
-            self.ctx.log("看到指定车辆，补按 Enter 进入详情...")
-            self.ctx.game_click(pos)
-            time.sleep(0.5)
-            input_driver.hw_press("enter")
-            self.change_state("verify_info_panel")
+            if not self.action_executed:
+                self.ctx.log("看到指定车辆，补按 Enter 进入详情...")
+                self.ctx.game_click(pos)
+                self.action_executed = True
+                
+            if self.wait_in_state(0.5):
+                input_driver.hw_press("enter")
+                self.change_state("verify_info_panel")
         else:
-            self.log_throttled("未看到指定车辆，向下滚动...")
-            input_driver.hw_press("down")
-            time.sleep(0.3)
+            if self.time_in_state > 0.3 and not self.action_executed:
+                self.log_throttled("未看到指定车辆，向下滚动...")
+                input_driver.hw_press("down")
+                self.state_start_time = time.monotonic()
 
     def state_verify_info_panel(self):
         if self.ctx.find_image("panel_info_Subaru_22B.png"):
