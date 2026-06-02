@@ -12,7 +12,7 @@ def run_sell(ctx, target_count):
         return False
 
     ctx.log("进入车辆与收藏！！！使用前请人工核验到正常移除车辆再进行自动化移除处理")
-    input_driver.hw_press("pagedown", delay=0.15)
+    self.ctx.interaction.press_key("pagedown", delay=0.15)
     time.sleep(1.0)
 
     pos_buycar = ctx.vision.wait_for_image(
@@ -29,7 +29,7 @@ def run_sell(ctx, target_count):
 
     ctx.game_click(pos_buycar)
     time.sleep(0.8)
-    input_driver.hw_press("enter")
+    self.ctx.interaction.press_key("enter")
     time.sleep(5)
 
     pos_bs = ctx.vision.wait_for_any_image(
@@ -47,20 +47,20 @@ def run_sell(ctx, target_count):
     ctx.game_click(pos_bs)
     time.sleep(1.0)
 
-    input_driver.hw_press("pagedown", delay=0.15)
+    self.ctx.interaction.press_key("pagedown", delay=0.15)
     time.sleep(1.0)
 
-    input_driver.hw_press("enter")  
+    self.ctx.interaction.press_key("enter")  
     time.sleep(2.0)
     
-    input_driver.hw_press("y") 
+    self.ctx.interaction.press_key("y") 
     time.sleep(1.0)
-    input_driver.hw_press("enter")
+    self.ctx.interaction.press_key("enter")
     time.sleep(0.8)
-    input_driver.hw_press("esc") 
+    self.ctx.interaction.press_key("esc") 
     time.sleep(1.5)
     
-    input_driver.hw_press("enter")
+    self.ctx.interaction.press_key("enter")
     time.sleep(0.8)
     ctx.move_to_game_coord(5, 5)
     time.sleep(0.2)
@@ -79,9 +79,9 @@ def run_sell(ctx, target_count):
         time.sleep(2.0)
     else:
         ctx.log("该车辆已经驾驶，或未找到图片，执行两次ESC")
-        input_driver.hw_press("esc")
+        self.ctx.interaction.press_key("esc")
         time.sleep(1.5)
-        input_driver.hw_press("esc")
+        self.ctx.interaction.press_key("esc")
     time.sleep(2.0)
 
     found = False
@@ -98,7 +98,7 @@ def run_sell(ctx, target_count):
         )
         if pos:
             ctx.log(f"第 {i + 1} 次检测到购买与出售，进入车辆界面")
-            input_driver.hw_press("enter")
+            self.ctx.interaction.press_key("enter")
             found = True
             break
         ctx.log(f"第 {i + 1} 次未检测到购买与出售，等待后重试")
@@ -109,7 +109,7 @@ def run_sell(ctx, target_count):
         return False
     
     time.sleep(1.5)
-    input_driver.hw_press("x")
+    self.ctx.interaction.press_key("x")
     time.sleep(0.5)
     ctx.move_to_game_coord(5, 5)
     
@@ -117,16 +117,16 @@ def run_sell(ctx, target_count):
     for _ in range(6):
         if not ctx.is_running:
             return False
-        input_driver.hw_press("down")
+        self.ctx.interaction.press_key("down")
         time.sleep(0.25)
     time.sleep(0.2)
-    input_driver.hw_press("enter")
+    self.ctx.interaction.press_key("enter")
     time.sleep(1.2)
     ctx.log("回到最近获得的前面")
     
-    input_driver.hw_press("backspace")
+    self.ctx.interaction.press_key("backspace")
     time.sleep(0.8)
-    input_driver.hw_press("enter")
+    self.ctx.interaction.press_key("enter")
     time.sleep(1.5)
 
     ctx.log("开始删除最近获得的车辆！！！请人工确认是否移除")
@@ -136,20 +136,20 @@ def run_sell(ctx, target_count):
         if not ctx.is_running:
             return False
             
-        input_driver.hw_press("enter")
+        self.ctx.interaction.press_key("enter")
         time.sleep(1.2)
         
         for _ in range(6):
             if not ctx.is_running:
                 return False
-            input_driver.hw_press("down")
+            self.ctx.interaction.press_key("down")
             time.sleep(0.2)
             
-        input_driver.hw_press("enter")
+        self.ctx.interaction.press_key("enter")
         time.sleep(0.5)
-        input_driver.hw_press("down")
+        self.ctx.interaction.press_key("down")
         time.sleep(0.3)
-        input_driver.hw_press("enter")
+        self.ctx.interaction.press_key("enter")
         time.sleep(0.8)
         
         ctx.sc_count += 1
@@ -158,7 +158,7 @@ def run_sell(ctx, target_count):
     for _ in range(3):
         if not ctx.is_running:
             return False
-        input_driver.hw_press("esc")
+        self.ctx.interaction.press_key("esc")
         time.sleep(1.0)
 
     return True

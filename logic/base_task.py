@@ -105,3 +105,29 @@ class BaseTask:
         if now - self.last_log_time.get(msg, 0) > interval:
             self.ctx.log(msg)
             self.last_log_time[msg] = now
+
+    
+    def get_asset(self, asset_key: str, is_global: bool = False) -> str:
+        """【严格资产提取器】：无兜底，缺失即引发致命崩溃"""
+        profile = self.ctx.config.get("current_profile")
+        if not profile:
+            raise ValueError("🚨 致命异常：当前任务未找到注入的车辆配置 (current_profile)！请检查主程序流。")
+        
+        if is_global:
+            val = profile.get(asset_key)
+        else:
+            val = profile.get("tasks", {}).get(self.task_id, {}).get(asset_key)
+            
+        if not val:
+            scope = "全局配置" if is_global else f"任务 [{self.task_id}] 专属配置"
+            raise KeyError(f"🚨 致命异常：{scope} 中缺少必须的特征资产 '{asset_key}'！")
+        return val
+
+    def get_features(self) -> dict:
+        """【严格特征提取器】：无兜底，缺失即引发致命崩溃"""
+        profile = self.ctx.config.get("current_profile", {})
+        features = profile.get("tasks", {}).get(self.task_id, {}).get("features")
+        
+        if features is None:
+            raise KeyError(f"🚨 致命异常：任务 [{self.task_id}] 配置中缺少 'features' 特征字典！")
+        return features

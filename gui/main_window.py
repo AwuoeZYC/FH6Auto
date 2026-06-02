@@ -57,11 +57,49 @@ class FH_UltimateBot(ctk.CTk):
         self.support_win = None
         self.start_time = 0.0
 
+        self.vehicle_profiles = {
+            "Subaru_22B": {
+                "display_name": "斯巴鲁 Impreza 22B (1998)",
+                "brand_img": "brand_Subaru.png",
+                "title_img": "title_Subaru.png",
+                "tasks": {
+                    "race": {
+                        "anchor_img": "car_Subaru_22B_liked.png",
+                        "features": {
+                            "text_1998_Subaru.png": True,
+                            "tag_liked.png": True
+                        }
+                    },
+                    "buy": {
+                        "anchor_img": "car_Subaru_22B_collection.png",
+                        "info_panel_img": "panel_info_Subaru_22B.png"
+                    },
+                    "mastery": {
+                        "anchor_img": "car_Subaru_22B_new.png",
+                        "features": {
+                            "text_1998_Subaru.png": True,
+                            "tag_new_car.png": True,
+                            "tag_rank_B.png": True,
+                            "tag_legendary.png": True
+                        }
+                    },
+                    "sell": {
+                        "anchor_img": "car_Subaru_22B_used.png",
+                        "features": {
+                            "text_1998_Subaru.png": True,
+                            "tag_new_car.png": False
+                        }
+                    }
+                }
+            }
+        }
+
         # 初始化应用静态默认配置
         self.config = {
+            "target_vehicle": "Subaru_22B",
             "race_count": 99,
             "buy_count": 30,
-            "cj_count": 30,
+            "mastery_count": 30,
             "sc_count": 30,
             "chk_1": True,
             "chk_2": True,
@@ -198,7 +236,7 @@ class FH_UltimateBot(ctk.CTk):
         try:
             self.config["race_count"] = int(self.entry_race.get())
             self.config["buy_count"] = int(self.entry_car.get())
-            self.config["cj_count"] = int(self.entry_cj.get())
+            self.config["mastery_count"] = int(self.entry_mastery.get())
             self.config["sc_count"] = int(self.entry_sc.get())
             self.config["global_loops"] = int(self.entry_global_loop.get())
             self.config["share_code"] = "".join(c for c in self.entry_share.get() if c.isdigit())
@@ -272,8 +310,8 @@ class FH_UltimateBot(ctk.CTk):
         self.entry_race.insert(0, str(final_races_per_loop))
         self.entry_car.delete(0, "end")
         self.entry_car.insert(0, str(cars_per_loop))
-        self.entry_cj.delete(0, "end")
-        self.entry_cj.insert(0, str(cars_per_loop))
+        self.entry_mastery.delete(0, "end")
+        self.entry_mastery.insert(0, str(cars_per_loop))
         self.entry_sc.delete(0, "end")
         self.entry_sc.insert(0, str(cars_per_loop))
         self.entry_global_loop.delete(0, "end")
@@ -352,38 +390,40 @@ class FH_UltimateBot(ctk.CTk):
 
         self.next_frame2, self.entry_next2, self.chk2 = create_next_step(self.config_frame, self.var_chk2, self.config.get("next_2", 3))
 
-        # 模块 3：抽奖
-        self.box_cj = ctk.CTkFrame(self.config_frame, width=360, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
-        self.box_cj.pack_propagate(False)
-        self.box_cj.pack(side="left", padx=8)
+        # 模块 3：熟练度加点
+        self.box_mastery = ctk.CTkFrame(self.config_frame, width=360, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
+        self.box_mastery.pack_propagate(False)
+        self.box_mastery.pack(side="left", padx=8)
 
-        top_cj = ctk.CTkFrame(self.box_cj, fg_color="transparent")
-        top_cj.pack(fill="x", pady=10)
+        top_mastery = ctk.CTkFrame(self.box_mastery, fg_color="transparent")
+        top_mastery.pack(fill="x", pady=10)
 
-        left_cj = ctk.CTkFrame(top_cj, fg_color="transparent")
-        left_cj.pack(side="left", padx=10)
+        left_mastery = ctk.CTkFrame(top_mastery, fg_color="transparent")
+        left_mastery.pack(side="left", padx=10)
 
-        ctk.CTkLabel(left_cj, text="3. 超级抽奖", font=ctk.CTkFont(weight="bold", size=20)).pack(pady=(0, 8))
+        ctk.CTkLabel(left_mastery, text="3. 熟练度加点", font=ctk.CTkFont(weight="bold", size=20)).pack(pady=(0, 8))
 
-        self.btn_cj = ctk.CTkButton(left_cj, text="开始", width=120, height=38, corner_radius=10, fg_color="#8E44AD", hover_color="#8E44AD", command=lambda: self.ui_trigger_start("cj"))
-        self.btn_cj.pack(pady=5)
+        self.btn_mastery = ctk.CTkButton(left_mastery, text="开始", width=120, height=38, corner_radius=10, fg_color="#8E44AD", hover_color="#8E44AD", command=lambda: self.ui_trigger_start("mastery"))
+        self.btn_mastery.pack(pady=5)
 
-        self.entry_cj = ctk.CTkEntry(left_cj, width=95, height=34, justify="center", corner_radius=8)
-        self.entry_cj.insert(0, str(self.config["cj_count"]))
-        self.entry_cj.pack(pady=5)
+        self.entry_mastery = ctk.CTkEntry(left_mastery, width=95, height=34, justify="center", corner_radius=8)
+        self.entry_mastery.insert(0, str(self.config["mastery_count"]))
+        self.entry_mastery.pack(pady=5)
 
-        self.lbl_cj = ctk.CTkLabel(left_cj, text=f"执行: 0 / {self.config['cj_count']}", text_color="#A0A0A0", font=ctk.CTkFont(size=14))
-        self.lbl_cj.pack(pady=(2, 8))
+        self.lbl_mastery = ctk.CTkLabel(left_mastery, text=f"执行: 0 / {self.config['mastery_count']}", text_color="#A0A0A0", font=ctk.CTkFont(size=14))
+        self.lbl_mastery.pack(pady=(2, 8))
 
-        dir_frame = ctk.CTkFrame(left_cj, fg_color="transparent")
+        self.entry_mastery.bind("<KeyRelease>", lambda e: self.on_entry_change(e, self.entry_mastery, self.lbl_mastery, "mastery_count"))
+
+        dir_frame = ctk.CTkFrame(left_mastery, fg_color="transparent")
         dir_frame.pack(pady=4)
 
         for text, val in [("↑", "up"), ("↓", "down"), ("←", "left"), ("→", "right")]:
             ctk.CTkButton(dir_frame, text=text, width=30, height=28, corner_radius=8, command=lambda x=val: self.add_skill_dir(x)).pack(side="left", padx=2)
 
-        ctk.CTkButton(left_cj, text="清除矩阵", width=90, height=28, corner_radius=8, fg_color="#C0392B", hover_color="#A93226", command=self.clear_skill_dir).pack(pady=8)
+        ctk.CTkButton(left_mastery, text="清除矩阵", width=90, height=28, corner_radius=8, fg_color="#C0392B", hover_color="#A93226", command=self.clear_skill_dir).pack(pady=8)
 
-        self.grid_frame = ctk.CTkFrame(top_cj, fg_color="transparent")
+        self.grid_frame = ctk.CTkFrame(top_mastery, fg_color="transparent")
         self.grid_frame.pack(side="right", padx=12)
 
         self.grid_labels = [[None] * 4 for _ in range(4)]
@@ -403,6 +443,35 @@ class FH_UltimateBot(ctk.CTk):
 
         self.next_frame4, self.entry_next4, self.chk4 = create_next_step(self.config_frame, self.var_chk4, self.config.get("next_4", 1))
 
+        self.profile_frame = ctk.CTkFrame(self, fg_color="#2B2B2B", height=45, corner_radius=10)
+        self.profile_frame.pack(fill="x", padx=18, pady=(15, 0))
+        self.profile_frame.pack_propagate(False)
+
+        ctk.CTkLabel(self.profile_frame, text="🚗 目标刷取车辆:", font=ctk.CTkFont(weight="bold", size=15), text_color="#3498DB").pack(side="left", padx=(15, 10))
+
+        # 1. 动态提取所有可选车辆的内部 ID 和展示名
+        available_ids = list(self.vehicle_profiles.keys())
+        display_names = [data["display_name"] for data in self.vehicle_profiles.values()]
+        
+        # 2. 动态默认值判定：优先读本地配置，如果没有或配置的 ID 已被废弃，则强制取字典的第一个作为默认
+        saved_id = self.config.get("target_vehicle")
+        if saved_id not in available_ids:
+            saved_id = available_ids[0] if available_ids else None
+            self.config["target_vehicle"] = saved_id  # 纠正并回写
+
+        # 3. 映射为 UI 需要的中文展示名
+        default_display = self.vehicle_profiles.get(saved_id, {}).get("display_name", "未知车辆") if saved_id else "无可用车辆"
+        
+        self.var_vehicle = ctk.StringVar(value=default_display)
+        self.opt_vehicle = ctk.CTkOptionMenu(
+            self.profile_frame, 
+            variable=self.var_vehicle, 
+            values=display_names,
+            width=250,
+            command=self.on_vehicle_change
+        )
+        self.opt_vehicle.pack(side="left", padx=(0, 20))
+        
         # 守护底栏设置
         self.global_settings_frame = ctk.CTkFrame(self, fg_color="#2B2B2B", height=45, corner_radius=10)
         self.global_settings_frame.pack(fill="x", padx=18, pady=(15, 0))
@@ -572,7 +641,7 @@ class FH_UltimateBot(ctk.CTk):
         elif "买车" in task_name:
             self.ui_call(self.lbl_car.configure, text=f"执行: {current_val} / {max_val}")
         elif "抽奖" in task_name:
-            self.ui_call(self.lbl_cj.configure, text=f"执行: {current_val} / {max_val}")
+            self.ui_call(self.lbl_mastery.configure, text=f"执行: {current_val} / {max_val}")
         elif "移除" in task_name:
             self.ui_call(self.lbl_sc.configure, text=f"执行: {current_val} / {max_val}")
 
@@ -590,6 +659,15 @@ class FH_UltimateBot(ctk.CTk):
         self.lbl_mini_time.configure(text=f"总耗时: {hrs:02d}:{mins:02d}:{secs:02d}")
         self.after(1000, self.update_timer_loop)
 
+    def on_vehicle_change(self, selected_display_name):
+        """响应下拉框变化，记录 ID 并保存"""
+        for vid, data in self.vehicle_profiles.items():
+            if data["display_name"] == selected_display_name:
+                self.config["target_vehicle"] = vid
+                self.save_config()
+                self.log(f"已切换目标刷取车辆为: {selected_display_name}")
+                break
+    
     def ui_trigger_start(self, start_step: str):
         """捕获 UI 参数并下发异步流水线开启指令"""
         if self.controller.is_running():
@@ -602,6 +680,7 @@ class FH_UltimateBot(ctk.CTk):
 
         # 隐藏庞大的主配置操作网格
         self.config_frame.pack_forget()
+        self.profile_frame.pack_forget()
         self.global_settings_frame.pack_forget()
         self.calc_frame.pack_forget()
         self.top_container.pack_forget()
@@ -625,6 +704,18 @@ class FH_UltimateBot(ctk.CTk):
         # 移交运行控制权给后台进程流
         self.controller.start_pipeline(start_step, self.config)
 
+        available_ids = list(self.vehicle_profiles.keys())
+        vid = self.config.get("target_vehicle")
+        if vid not in available_ids:
+            vid = available_ids[0]
+            
+        self.config["current_profile"] = self.vehicle_profiles.get(vid)
+        
+        self.start_time = time.monotonic()
+        self.update_timer_loop()
+        
+        self.controller.start_pipeline(start_step, self.config)
+
     def on_controller_stopped(self):
         """当后台控制核心停止或遭遇熔断时，安全恢复大视窗界面结构"""
         def do_restore():
@@ -633,6 +724,7 @@ class FH_UltimateBot(ctk.CTk):
             # 按顺序线性重构标准大控制面板
             self.top_container.pack(fill="x", padx=18, pady=(18, 10))
             self.config_frame.pack(fill="x")
+            self.profile_frame.pack(fill="x", padx=18, pady=(15, 0))
             self.global_settings_frame.pack(fill="x", pady=(15, 0))
             self.calc_frame.pack(fill="x", pady=(10, 0))
             self.bottom_frame.pack(fill="both", expand=True, padx=18, pady=(6, 12))

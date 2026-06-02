@@ -26,14 +26,16 @@ class SceneNavigator:
             else:
                 # 只要有一张特征图在画面中即可匹配 (如包含多种状态的主菜单)
                 match = any(self.ctx.check_image_in_buffer(screen_bgr, img) for img in images)
-                
+            if match and "exclude" in rules:
+                if any(self.ctx.check_image_in_buffer(screen_bgr, ex_img) for ex_img in rules["exclude"]):
+                    match = False
             if match:
                 return node_name
                 
         return "scene_unknown"
 
     def recover_to_safe_state(self):
-        """盲按狂暴脱困协议：一直按 ESC，直到雷达能认出当前界面"""
+        """盲按狂暴脱困协议：支持高频中断拦截"""
         self.ctx.log("⚠️ 场景识别为未知状态，尝试回到已知节点...")
         
         for i in range(20):
@@ -44,8 +46,13 @@ class SceneNavigator:
                 self.ctx.log(f"✅ 成功逃离未知状态，当前识别为: {scene}")
                 return scene  
                 
-            input_driver.hw_press("esc")
-            time.sleep(1.5)
+            self.ctx.interaction.press_key("esc")
+            
+            # 【修复】：将死等的 1.5s 拆解为非阻塞级极速轮询
+            start_t = time.monotonic()
+            while time.monotonic() - start_t < 1.5:
+                if not self.ctx.is_running(): return None
+                time.sleep(0.05)
             
         self.ctx.log("🚨 无法通过 ESC 回到任何已知节点，脱困彻底失败！")
         return None

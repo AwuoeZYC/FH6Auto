@@ -110,12 +110,8 @@ class VisionEngine:
         return cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
 
     def _do_match(self, screen_bgr: np.ndarray, template_abs_path: str, region: tuple = None, 
-                  threshold: float = 0.75, expected_base_w: int = 1024, expected_base_h: int = 768, fast_mode: bool = True) -> tuple:
-        """
-        核心匹配逻辑 (逆向降维版)。
-        通过将截屏逆向缩放回基准空间进行比对，运算时间从十几秒压缩至毫秒级。
-        同时兼容: 原生窗口、非等比强行拉伸(满屏)、等比拉伸(留黑边)。
-        """
+                  threshold: float = 0.75, expected_base_w: int = 1024, expected_base_h: int = 768, 
+                  fast_mode: bool = True, full_screen_size: tuple = None) -> tuple:
         if screen_bgr is None or screen_bgr.size == 0:
             return None
             
@@ -123,38 +119,35 @@ class VisionEngine:
         if orig_tpl is None:
             return None
 
-        current_w = screen_bgr.shape[1]
-        current_h = screen_bgr.shape[0]
+        # 【核心修复】：如果是局部 ROI 搜索，放大倍率必须依然参照全局游戏窗口的大小！
+        if full_screen_size:
+            current_w, current_h = full_screen_size
+        else:
+            current_w, current_h = screen_bgr.shape[1], screen_bgr.shape[0]
         
-        # 计算当前物理屏幕相对基准素材的放大倍率
         scale_x = current_w / float(expected_base_w)
         scale_y = current_h / float(expected_base_h)
 
-        # 智能推演三种可能存在的显卡呈现状态
-        scale_native = (1.0, 1.0)                     # UI 输入分辨率与实际吻合
-        scale_stretch = (scale_x, scale_y)            # 显卡强行拉伸铺满全屏
-        scale_pillarbox = (scale_y, scale_y)          # 显卡保持原比例拉伸，以高度为准左右留黑边
+        scale_native = (1.0, 1.0)
+        scale_stretch = (scale_x, scale_y)
+        scale_pillarbox = (scale_y, scale_y)
 
         if fast_mode:
             scales_to_try = list(dict.fromkeys([scale_native, scale_stretch, scale_pillarbox]))
         else:
             scales_to_try = list(dict.fromkeys([
                 scale_native, scale_stretch, scale_pillarbox,
-                (scale_x * 0.98, scale_y * 0.98),
-                (scale_x * 1.02, scale_y * 1.02)
+                (scale_x * 0.98, scale_y * 0.98), (scale_x * 1.02, scale_y * 1.02)
             ]))
 
         th, tw = orig_tpl.shape[:2]
 
         for sx, sy in scales_to_try:
-            # 【性能核心】：逆向缩放屏幕！
-            # 将 2K/4K 的截图缩小回 1024x768 的基准空间进行高速比对
             if abs(sx - 1.0) < 0.01 and abs(sy - 1.0) < 0.01:
                 work_screen = screen_bgr
             else:
                 work_screen = cv2.resize(screen_bgr, None, fx=1.0/sx, fy=1.0/sy, interpolation=cv2.INTER_AREA)
 
-            # 越界保护：如果缩小后的屏幕依然比模板小，说明该物理拉伸比例不符合当前现实，直接跳过
             if th > work_screen.shape[0] or tw > work_screen.shape[1]: 
                 continue
 
@@ -162,15 +155,70 @@ class VisionEngine:
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
 
             if max_val >= threshold:
-                # 在 1024x768 空间下找到了坐标，现在将其乘以放大倍率，还原到物理显示器上的真实点击位置
                 match_center_x = max_loc[0] + tw // 2
                 match_center_y = max_loc[1] + th // 2
-                
                 global_x = int(match_center_x * sx) + (region[0] if region else 0)
                 global_y = int(match_center_y * sy) + (region[1] if region else 0)
                 return (global_x, global_y)
                 
         return None
+
+    def _do_match_all(self, screen_bgr: np.ndarray, template_abs_path: str, region: tuple = None, 
+                      threshold: float = 0.75, expected_base_w: int = 1024, expected_base_h: int = 768, 
+                      fast_mode: bool = True, full_screen_size: tuple = None) -> list:
+        """【新增】：返回所有符合阈值的坐标列表，包含距离去重 (NMS)"""
+        if screen_bgr is None or screen_bgr.size == 0:
+            return []
+
+        orig_tpl = self.load_template(template_abs_path)
+        if orig_tpl is None:
+            return []
+
+        if full_screen_size:
+            current_w, current_h = full_screen_size
+        else:
+            current_w, current_h = screen_bgr.shape[1], screen_bgr.shape[0]
+
+        scale_x = current_w / float(expected_base_w)
+        scale_y = current_h / float(expected_base_h)
+
+        scale_native = (1.0, 1.0)
+        scale_stretch = (scale_x, scale_y)
+        scale_pillarbox = (scale_y, scale_y)
+        scales_to_try = list(dict.fromkeys([scale_native, scale_stretch, scale_pillarbox]))
+
+        th, tw = orig_tpl.shape[:2]
+        all_matches = []
+
+        for sx, sy in scales_to_try:
+            if abs(sx - 1.0) < 0.01 and abs(sy - 1.0) < 0.01:
+                work_screen = screen_bgr
+            else:
+                work_screen = cv2.resize(screen_bgr, None, fx=1.0/sx, fy=1.0/sy, interpolation=cv2.INTER_AREA)
+
+            if th > work_screen.shape[0] or tw > work_screen.shape[1]: 
+                continue
+
+            res = cv2.matchTemplate(work_screen, orig_tpl, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= threshold)
+            
+            for pt in zip(*loc[::-1]): 
+                match_center_x = pt[0] + tw // 2
+                match_center_y = pt[1] + th // 2
+                global_x = int(match_center_x * sx) + (region[0] if region else 0)
+                global_y = int(match_center_y * sy) + (region[1] if region else 0)
+                all_matches.append((global_x, global_y))
+
+            if all_matches:
+                break # 只要在某个比例下找到了符合条件的目标，就不再尝试其他比例以防重复
+
+        # 欧式距离去重，防止同一个图标被返回多个密集坐标
+        deduped = []
+        for pt in all_matches:
+            if not any(np.hypot(pt[0]-d[0], pt[1]-d[1]) < 25 for d in deduped):
+                deduped.append(pt)
+
+        return deduped
 
     # ==========================================
     # --- 对外暴露 API ---

@@ -1,15 +1,21 @@
 import time
 from collections import deque
 from core.ui_graph import UI_GRAPH, NODE_IDENTIFIERS
-import core.input_driver as input_driver
+import core.input_driver as hw_driver
 
 class UIRouter:
-    """
-    UI 界面全局导航路由器 (The Driver)
-    利用 BFS 算法计算最短路径，并采用状态机机制严格确认每一步的到达。
-    """
     def __init__(self, ctx):
-        self.ctx = ctx  # 注入 BotController
+        self.ctx = ctx  
+        self.status = "IDLE"  # 路由器专属状态标识
+        
+        self.target_node = None
+        self.curr_node = None
+        self.path = []
+        self.step_idx = 0
+        self.wait_start = 0.0
+        self.last_retry = 0.0
+        self.attempt = 1
+        self.max_retries = 5
 
     def verify_node(self, node_name: str) -> bool:
         """
@@ -23,22 +29,37 @@ class UIRouter:
         rules = NODE_IDENTIFIERS[node_name]
         mode = rules.get("mode", "ANY")
         images = rules.get("images", [])
+        excludes = rules.get("exclude", [])  # 【新增】：获取排斥列表
         
         # 截取单帧画面，在内存中进行高频多图判定
         screen_bgr = self.ctx.vision.capture_region(self.ctx.game_region)
         
+        # --- 1. 正向特征匹配 ---
+        is_match = False
         if mode == "ALL":
-            # 必须全部图像都找到
+            is_match = True
             for img in images:
                 if not self.ctx.check_image_in_buffer(screen_bgr, img):
-                    return False
-            return True
+                    is_match = False
+                    break  # 只要有一张不在，直接打破循环，判负
         else:
-            # 找到任意一张即为真
             for img in images:
                 if self.ctx.check_image_in_buffer(screen_bgr, img):
-                    return True
+                    is_match = True
+                    break  # 只要找到一张，直接打破循环，判正
+
+        # 如果正向都没通过，直接结束，省去后续检查
+        if not is_match:
             return False
+            
+        # --- 2. 反向排斥特征匹配 ---
+        # 既然正向通过了，我们来检查画面里有没有绝对不能出现的违禁图
+        for ex_img in excludes:
+            if self.ctx.check_image_in_buffer(screen_bgr, ex_img):
+                return False  # 踩雷了，一票否决
+                
+        # 顺利通过正反双重验证
+        return True
 
     def find_shortest_path(self, start_node: str, target_node: str) -> list:
         """
@@ -66,65 +87,125 @@ class UIRouter:
                     
         return None # 无法抵达
 
-    def navigate_to(self, current_node: str, target_node: str) -> bool:
-        """
-        执行寻路，并包含防抖、自愈、超时重试的主动确认状态机机制。
-        """
-        if current_node == target_node:
-            self.ctx.log(f"📍 已经在目标节点 [{target_node}]，无需寻路。")
-            return True
+    def start_navigation(self, current_node: str, target_node: str, max_retries: int = 5):
+        """【非阻塞入口】：只初始化寻路数据并计算拓扑路线，立即交出控制权"""
+        self.status = "RUNNING"
+        self.target_node = target_node
+        self.curr_node = current_node
+        self.max_retries = max_retries
+        self.attempt = 1
 
-        path = self.find_shortest_path(current_node, target_node)
-        if not path:
-            self.ctx.log(f"🚨 寻路失败：无法找到从 {current_node} 到 {target_node} 的路线！")
-            return False
+        self.ctx.log("⚡ 发送防挂机唤醒信号...")
+        gx, gy, _, _ = self.ctx.game_region
+        hw_driver.hw_mouse_move(gx + 5, gy + 5)
+        hw_driver.hw_mouse_move(gx, gy)
+        
+        self._plan_route()
 
-        self.ctx.log(f"🗺️ 算出最短路径，需经过 {len(path)} 步...")
+    def _plan_route(self):
+        """内部拓扑规划"""
+        if self.curr_node == self.target_node:
+            if self.verify_node(self.target_node):
+                self.ctx.log(f"📍 视觉核验通过：已经在目标节点 [{self.target_node}]")
+                self.status = "SUCCESS"
+                return
+            else:
+                self.ctx.log(f"⚠️ 认知与画面不符：预期在 {self.target_node} 但未识别到特征，强制重新规划...")
 
-        for step_idx, (next_node, action_type, action_value) in enumerate(path, 1):
-            if not self.ctx.is_running(): return False
+        self.path = self.find_shortest_path(self.curr_node, self.target_node)
+        if not self.path:
+            self.ctx.log(f"🚨 寻路失败：无法找到从 {self.curr_node} 到 {self.target_node} 的拓扑路线！")
+            self._handle_failure()
+            return
+
+        self.ctx.log(f"🗺️ 算出最短路径，需经过 {len(self.path)} 步...")
+        self.step_idx = 0
+        self._execute_action()
+
+    def _execute_action(self):
+        """单步动作下发"""
+        if self.step_idx >= len(self.path): return
+        next_node, action_type, action_value = self.path[self.step_idx]
+        
+        if action_type == "key":
+            self.ctx.interaction.press_key(action_value)
+        elif action_type == "click_image":
+            pos = self.ctx.find_any_image(action_value) if isinstance(action_value, list) else self.ctx.find_image(action_value)
+            if pos:
+                self.ctx.interaction.game_click(pos)
+            else:
+                self.ctx.log(f"🚨 寻路中断：无法在画面中找到所需的互动按钮 [{action_value}]")
+                self.wait_start = 0 # 强制设为超时，交由 tick 触发纠错
+                return
+
+        self.wait_start = time.monotonic()
+        self.last_retry = self.wait_start
+
+    def _handle_failure(self):
+        """全局纠错与自愈流转"""
+        self.ctx.log(f"⚠️ 寻路受阻，尝试重新定位... (尝试 {self.attempt}/{self.max_retries})")
+        new_node = self.ctx.navigator.identify_scene()
+        if new_node == "scene_unknown":
+            new_node = self.ctx.navigator.recover_to_safe_state()
+        
+        if not new_node:
+            self.ctx.log("🚨 彻底迷失，无法重定位，寻路终止。")
+            self.status = "FAILED"
+            return
+
+        self.curr_node = new_node
+        self.attempt += 1
+        if self.attempt > self.max_retries:
+            self.ctx.log(f"🚨 达到最大重试次数 ({self.max_retries})，寻路彻底失败！")
+            self.status = "FAILED"
+            return
             
-            # --- 执行过图动作 ---
+        self._plan_route()
+
+    def tick(self) -> str:
+        """【核心】：外层任务主循环每帧调用一次此方法，纯无阻塞推进寻路进度"""
+        if self.status != "RUNNING":
+            return self.status
+
+        if self.step_idx >= len(self.path):
+            if self.verify_node(self.target_node):
+                self.ctx.log(f"🎯 寻路完成且核验通过！成功抵达终点: {self.target_node}")
+                self.status = "SUCCESS"
+            else:
+                self.ctx.log(f"⚠️ 寻路核验未通过，未能到达终点 [{self.target_node}]")
+                self._handle_failure()
+            return self.status
+
+        next_node, action_type, action_value = self.path[self.step_idx]
+        
+        edge_info = UI_GRAPH.get(self.curr_node, {}).get(next_node, {})
+        edge_timeout = edge_info.get("timeout", 8.0)
+        retry_interval = edge_info.get("retry", 2.5)
+
+        now = time.monotonic()
+
+        # 1. 到达核验
+        if self.verify_node(next_node):
+            self.ctx.log(f"✅ 导航进度 {self.step_idx+1}/{len(self.path)}: 成功到达 [{next_node}]")
+            self.curr_node = next_node
+            self.step_idx += 1
+            if self.step_idx < len(self.path):
+                self._execute_action()
+            return self.status
+
+        # 2. 吞键防抖
+        if now - self.last_retry > retry_interval:
+            self.ctx.log(f"⚠️ 疑似长加载或吞键，重试动作前往 [{next_node}]...")
             if action_type == "key":
-                input_driver.hw_press(action_value)
+                self.ctx.interaction.press_key(action_value)
             elif action_type == "click_image":
-                pos = self.ctx.find_image(action_value)
-                if pos:
-                    self.ctx.game_click(pos)
-                else:
-                    self.ctx.log(f"🚨 寻路中断：无法在画面中找到所需的互动按钮 [{action_value}]")
-                    return False
-            
-            # --- 主动确认防抖循环 (防卡死，最多等 8 秒) ---
-            wait_start = time.monotonic()
-            arrived = False
-            last_retry = wait_start
-            
-            while time.monotonic() - wait_start < 8.0:
-                if not self.ctx.is_running(): return False
-                
-                # 【精准雷达】：只看下一步的节点到了没
-                if self.verify_node(next_node):
-                    self.ctx.log(f"✅ 导航进度 {step_idx}/{len(path)}: 成功到达 [{next_node}]")
-                    arrived = True
-                    time.sleep(0.5) # 给界面的 UI 动画(如 Tab 滑动)留微小喘息时间
-                    break
-                    
-                # 【自愈机制】：如果超过 2.5 秒还没到达，说明按键大概率被吞了，补按一次！
-                if time.monotonic() - last_retry > 2.5:
-                    self.ctx.log(f"⚠️ 疑似丢包或游戏卡顿，重试动作前往 [{next_node}]...")
-                    if action_type == "key":
-                        input_driver.hw_press(action_value)
-                    elif action_type == "click_image":
-                        pos = self.ctx.find_image(action_value)
-                        if pos: self.ctx.game_click(pos)
-                    last_retry = time.monotonic()
-                    
-                time.sleep(0.1)
+                pos = self.ctx.find_any_image(action_value) if isinstance(action_value, list) else self.ctx.find_image(action_value)
+                if pos: self.ctx.interaction.game_click(pos)
+            self.last_retry = now
 
-            if not arrived:
-                self.ctx.log(f"🚨 寻路超时：无法抵达节点 [{next_node}]，放弃导航。")
-                return False
+        # 3. 超时熔断
+        if now - self.wait_start > edge_timeout:
+            self.ctx.log(f"🚨 寻路超时：无法抵达步骤节点 [{next_node}]，放弃当前路径。")
+            self._handle_failure()
 
-        self.ctx.log(f"🎯 寻路完成！成功抵达终点: {target_node}")
-        return True
+        return self.status

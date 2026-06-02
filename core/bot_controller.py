@@ -7,6 +7,7 @@ from core.router import UIRouter    # <--- 新增：引入路由引擎
 from utils.game_monitor import GameMonitor
 import os
 import core.pipeline_manager
+from core.interaction import InteractionEngine
 
 class BotController:
     def __init__(self, search_dirs: list, base_res: tuple):
@@ -29,6 +30,9 @@ class BotController:
             logger_callback=self.log,
             check_running_callback=self.is_running
         )
+        self.interaction = InteractionEngine(self) # 硬件交互肌肉
+        self.navigator = SceneNavigator(self)      # GPS 定位雷达
+        self.router = UIRouter(self)               # 自动驾驶司机
         
         # --- 核心组件装配 ---
         self.navigator = SceneNavigator(self)  # GPS 定位雷达
@@ -74,47 +78,68 @@ class BotController:
     # ==========================================
     # --- 任务层门面接口 (Facade API) 同步更新 ---
     # ==========================================
-    def find_image(self, template_name: str, threshold: float = 0.90, fast_mode: bool = True) -> tuple:
+    def press_key(self, key: str):
+        """统一硬件按键下发，包含全局熔断拦截"""
+        if not self._is_running:
+            return
+        import core.input_driver as input_driver
+        input_driver.hw_press(key)
+
+    def find_image(self, template_name: str, region: tuple = None, threshold: float = 0.90, fast_mode: bool = True) -> tuple:
+        """视觉搜索的 Context 包装器。自动注入全局分辨率和路径。"""
         base_w, base_h = self.base_res
         folder = self.vision._get_aspect_ratio_folder(base_w, base_h)
         actual_path = self.vision._resolve_template_path(self.search_dirs, folder, template_name)
-        screen_bgr = self.vision.capture_region(self.game_region)
-        # 加入 base_h 的传递
-        return self.vision._do_match(screen_bgr, actual_path, self.game_region, threshold, base_w, base_h, fast_mode)
+        
+        search_region = region if region else self.game_region
+        screen_bgr = self.vision.capture_region(search_region)
+        
+        # 【核心修复】：注入实际的全局游戏窗口尺寸
+        gw, gh = self.game_region[2], self.game_region[3]
+        
+        return self.vision._do_match(
+            screen_bgr, actual_path, search_region, threshold, 
+            base_w, base_h, fast_mode, full_screen_size=(gw, gh)
+        )
 
-    def find_any_image(self, template_names: list, threshold: float = 0.90, fast_mode: bool = True) -> tuple:
+
+    def find_any_image(self, template_names: list, region: tuple = None, threshold: float = 0.90, fast_mode: bool = True) -> tuple:
+        """
+        多图轮询寻找。将 region 参数向下透传给单图寻找逻辑。
+        """
         for name in template_names:
-            pos = self.find_image(name, threshold, fast_mode)
-            if pos: return pos
+            # 【核心修复】：把接收到的 region 传递给 find_image
+            pos = self.find_image(name, region=region, threshold=threshold, fast_mode=fast_mode)
+            if pos: 
+                return pos
         return None
+
+    def find_all_images(self, template_name: str, region: tuple = None, threshold: float = 0.90, fast_mode: bool = True) -> list:
+        """【新增】：多目标检索接口，返回所有匹配项的坐标列表"""
+        base_w, base_h = self.base_res
+        folder = self.vision._get_aspect_ratio_folder(base_w, base_h)
+        actual_path = self.vision._resolve_template_path(self.search_dirs, folder, template_name)
+        
+        search_region = region if region else self.game_region
+        screen_bgr = self.vision.capture_region(search_region)
+        gw, gh = self.game_region[2], self.game_region[3]
+        
+        return self.vision._do_match_all(
+            screen_bgr, actual_path, search_region, threshold, 
+            base_w, base_h, fast_mode, full_screen_size=(gw, gh)
+        )
 
     def check_image_in_buffer(self, screen_bgr, template_name: str, threshold: float = 0.68) -> bool:
         base_w, base_h = self.base_res
         folder = self.vision._get_aspect_ratio_folder(base_w, base_h)
         actual_path = self.vision._resolve_template_path(self.search_dirs, folder, template_name)
-        # 加入 base_h 的传递
-        pos = self.vision._do_match(screen_bgr, actual_path, self.game_region, threshold, base_w, base_h, fast_mode=True)
+        gw, gh = self.game_region[2], self.game_region[3]
+        
+        pos = self.vision._do_match(
+            screen_bgr, actual_path, self.game_region, threshold, 
+            base_w, base_h, fast_mode=True, full_screen_size=(gw, gh)
+        )
         return pos is not None
-
-    def game_click(self, pos: tuple, double: bool = False):
-        if not self._is_running or not pos:
-            return
-        import pydirectinput
-        import core.input_driver as input_driver
-        
-        x, y = int(pos[0]), int(pos[1])
-        input_driver.hw_mouse_move(x, y)
-        time.sleep(0.2)
-        
-        for _ in range(2 if double else 1):
-            pydirectinput.mouseDown()
-            time.sleep(0.1)
-            pydirectinput.mouseUp()
-            time.sleep(0.1)
-            
-        gx, gy, _, _ = self.game_region
-        input_driver.hw_mouse_move(gx + 5, gy + 5)
-        time.sleep(0.2)
 
     # ==========================================
     # --- 生命周期与 UI 同步控制 ---
@@ -163,13 +188,14 @@ class BotController:
         from core.pipeline_manager import PipelineManager
         from logic.race_task import RaceTask
         from logic.buy_task import BuyCarTask
+        from logic.car_mastery_task import CarMasteryTask
         
         pipeline = PipelineManager(self)
         
         # 将所有的控制参数完整地绑定到对应的任务槽位上
         pipeline.register_task("race", RaceTask, "race_count", "chk_1", "next_1")
         pipeline.register_task("buy", BuyCarTask, "buy_count", "chk_2", "next_2")
-        # pipeline.register_task("cj", WheelspinTask, "cj_count", "chk_3", "next_3")
+        pipeline.register_task("mastery", CarMasteryTask, "mastery_count", "chk_3", "next_3")
         # pipeline.register_task("sell", SellTask, "sc_count", "chk_4", "next_4")
 
         pipeline.run_pipeline(start_step)
@@ -179,13 +205,9 @@ class BotController:
     def stop_all(self):
         if not self._is_running: return
         self.set_running_status(False)
-        
-        import core.input_driver as input_driver
-        import pydirectinput
-        for key in ["w", "e", "y", "enter", "esc", "up", "down", "left", "right", "space", "backspace"]:
-            input_driver.hw_key_up(key)
-        try:
-            pydirectinput.mouseUp()
-        except Exception:
-            pass
+
+        # 呼叫肌肉引擎释放所有按键
+        if hasattr(self, 'interaction'):
+            self.interaction.release_all()
+
         self.log("🛑 核心控制器已下发强制停止指令，物理键位全部复位。")

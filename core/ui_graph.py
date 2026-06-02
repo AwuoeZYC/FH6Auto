@@ -5,11 +5,18 @@
 # mode: "ANY" (或关系), "ALL" (且关系)
 
 NODE_IDENTIFIERS = {
+    # --- 特殊节点 ---
+    "scene_confirmation_festival": {"mode": "ANY", "images": ["title_move_to_festival.png"]},
+    "scene_confirmation_home":     {"mode": "ANY", "images": ["title_move_to_home.png"]},
+
+    # --- 漫游 ---
+    "scene_free_roam": {"mode": "ANY", "images": ["text_anna.png"]},
+
     # --- 主菜单 6 大 Tab ---
-    "scene_menu_story":    {"mode": "ANY", "images": ["btn_collection_journal.png"]},
+    "scene_menu_campaign": {"mode": "ANY", "images": ["btn_collection_journal.png"]},
     "scene_menu_cars":     {"mode": "ANY", "images": ["btn_buy_new_used.png"]},
-    "scene_menu_horizon":  {"mode": "ANY", "images": ["btn_residence.png", "btn_super_wheelspin.png"]}, # OR
-    "scene_menu_online":   {"mode": "ANY", "images": ["btn_team.png"]},
+    "scene_menu_horizon":  {"mode": "ANY", "images": ["btn_return_home.png", "btn_super_wheelspin.png"]}, # OR
+    "scene_menu_online":   {"mode": "ANY", "images": ["btn_convoy.png"]},
     "scene_menu_creative": {"mode": "ANY", "images": ["btn_eventlab.png"]},
     "scene_menu_store":    {"mode": "ANY", "images": ["btn_treasure_map.png"]},
 
@@ -21,6 +28,15 @@ NODE_IDENTIFIERS = {
     # --- 跑图支线 ---
     "scene_eventlab":   {"mode": "ANY", "images": ["btn_play_event.png"]}, # 蓝图页
     "scene_play_event": {"mode": "ANY", "images": ["title_event.png"]}, # 赛事页
+
+    # --- 房屋 ---
+    "scene_home_garage": {"mode": "ANY", "images": ["opt_visitor_permission_selected.png", "opt_visitor_permission_normal.png"]},
+
+    # --- 枢纽（嘉年华或房屋） ---
+    "scene_hub_campaign": {"mode": "ANY", "images": ["opt_drive_selected.png", "opt_drive_normal.png"]},
+    "scene_hub_buy_sell": {"mode": "ANY", "images": ["opt_car_pass_selected.png", "opt_car_pass_normal.png"]},
+    "scene_hub_cars": {"mode": "ANY", "images": ["opt_my_cars_normal.png", "opt_my_cars_selected.png", "opt_upgrades_tuning_normal.png", "opt_upgrades_tuning_selected.png"]},
+    "scene_hub_character": {"mode": "ANY", "images": ["opt_character_normal.png", "opt_character_selected.png"]},
 }
 
 # ==========================================
@@ -29,37 +45,50 @@ NODE_IDENTIFIERS = {
 # 规定：每一个键代表当前节点，其值代表可以通过何种动作前往相邻节点。
 
 UI_GRAPH = {
+    # ---------------- 0. 漫游 ----------------
+    "scene_free_roam": {
+        "scene_menu_campaign": {"action": "key", "value": "esc"}
+    },
+
     # ---------------- 1. 环形主菜单 (双向链表) ----------------
-    "scene_menu_story": {
+    "scene_menu_campaign": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_menu_store":    {"action": "key", "value": "pageup"},   # 向左
         "scene_menu_cars":     {"action": "key", "value": "pagedown"}, # 向右
         "scene_coll_journal":  {"action": "click_image", "value": "btn_collection_journal.png"} # 深入支线
     },
     "scene_menu_cars": {
-        "scene_menu_story":    {"action": "key", "value": "pageup"},
-        "scene_menu_horizon":  {"action": "key", "value": "pagedown"}
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_menu_campaign": {"action": "key", "value": "pageup"},
+        "scene_menu_horizon":  {"action": "key", "value": "pagedown"},
+        "scene_confirmation_festival":  {"action": "click_image", "value": "btn_buy_new_used.png"} # 进入嘉年华
     },
     "scene_menu_horizon": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_menu_cars":     {"action": "key", "value": "pageup"},
-        "scene_menu_online":   {"action": "key", "value": "pagedown"}
+        "scene_menu_online":   {"action": "key", "value": "pagedown"},
+        "scene_confirmation_home":   {"action": "click_image", "value": "btn_return_home.png"} # 进入房屋
     },
     "scene_menu_online": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_menu_horizon":  {"action": "key", "value": "pageup"},
         "scene_menu_creative": {"action": "key", "value": "pagedown"}
     },
     "scene_menu_creative": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_menu_online":   {"action": "key", "value": "pageup"},
         "scene_menu_store":    {"action": "key", "value": "pagedown"},
         "scene_eventlab":      {"action": "click_image", "value": "btn_eventlab.png"} # 深入跑图支线
     },
     "scene_menu_store": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_menu_creative": {"action": "key", "value": "pageup"},
-        "scene_menu_story":    {"action": "key", "value": "pagedown"}
+        "scene_menu_campaign": {"action": "key", "value": "pagedown"}
     },
 
     # ---------------- 2. 买车支线 ----------------
     "scene_coll_journal": {
-        "scene_menu_story":      {"action": "key", "value": "esc"}, # 退出返回
+        "scene_menu_campaign":   {"action": "key", "value": "esc"}, # 退出返回
         "scene_master_explorer": {"action": "click_image", "value": "btn_master_explorer.png"} # 继续深入
     },
     "scene_master_explorer": {
@@ -68,7 +97,6 @@ UI_GRAPH = {
     },
     "scene_car_collection": {
         "scene_master_explorer": {"action": "key", "value": "esc"}
-        # 到达终点，不需要深入的边，具体买车业务由 buy_task.py 接管
     },
 
     # ---------------- 3. 跑图支线 ----------------
@@ -78,6 +106,38 @@ UI_GRAPH = {
     },
     "scene_play_event": {
         "scene_eventlab":      {"action": "key", "value": "esc"}
-        # 到达终点，由 race_task.py 接管
-    }
+    },
+    # ---------------- 4. 房屋 ----------------
+    "scene_confirmation_home": {
+        "scene_hub_buy_sell": {"action": "key", "value": "enter"}
+    },
+    "scene_home_garage": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_hub_cars":      {"action": "key", "value": "pageup"}, 
+        "scene_hub_character": {"action": "key", "value": "pagedown"}
+    },
+
+    # ---------------- 5. 枢纽（嘉年华或房屋） ----------------
+    "scene_confirmation_festival": {
+        "scene_hub_buy_sell": {"action": "key", "value": "enter"}
+    },
+    "scene_hub_campaign": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_hub_character": {"action": "key", "value": "pageup"},
+        "scene_hub_buy_sell":  {"action": "key", "value": "pagedown"}
+    },
+    "scene_hub_buy_sell": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_hub_campaign":  {"action": "key", "value": "pageup"},
+        "scene_hub_cars":      {"action": "key", "value": "pagedown"}
+    },
+    "scene_hub_cars": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_hub_buy_sell":  {"action": "key", "value": "pageup"}
+    },
+    "scene_hub_character": {
+        "scene_free_roam":     {"action": "key", "value": "esc"},
+        "scene_hub_campaign":  {"action": "key", "value": "pagedown"}
+    },
+
 }

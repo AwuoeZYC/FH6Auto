@@ -1,0 +1,8 @@
+升级与调教 upgrades_tuning
+车辆熟练度 car_mastery
+上车 get_in
+移除 remove
+驾驶 drive
+车展 autoshow
+拍卖行 auction_house
+自定义角色 customize_character

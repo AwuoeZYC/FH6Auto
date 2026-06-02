@@ -46,8 +46,14 @@ class PipelineManager:
             if target_count > 0:
                 # 如果是新进入该节点，或者上一轮大循环过来的，则新建实例；否则复用实例保持进度
                 if current_task_instance is None or last_run_idx != curr_idx:
-                    current_task_instance = task_info["class"](self.ctx, target_count)
-                    last_run_idx = curr_idx
+                    # 【加固补丁】：包裹实例化过程，防止子类 __init__ 抛出异常导致静默死锁
+                    try:
+                        current_task_instance = task_info["class"](self.ctx, target_count)
+                        last_run_idx = curr_idx
+                    except Exception as e:
+                        self.ctx.log(f"🔥 严重异常：初始化任务 [{task_info['id']}] 时崩溃: {e}")
+                        self.ctx.stop_all()
+                        return
 
                 step_success = False
                 try:
