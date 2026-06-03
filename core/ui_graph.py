@@ -86,30 +86,10 @@ UI_GRAPH = {
         "scene_menu_campaign": {"action": "key", "value": "pagedown"}
     },
 
-    # ---------------- 2. 买车支线 ----------------
-    "scene_coll_journal": {
-        "scene_menu_campaign":   {"action": "key", "value": "esc"}, # 退出返回
-        "scene_master_explorer": {"action": "click_image", "value": "btn_master_explorer.png"} # 继续深入
-    },
-    "scene_master_explorer": {
-        "scene_coll_journal":    {"action": "key", "value": "esc"},
-        "scene_car_collection":  {"action": "click_image", "value": "btn_car_collection_white.png"}
-    },
-    "scene_car_collection": {
-        "scene_master_explorer": {"action": "key", "value": "esc"}
-    },
-
-    # ---------------- 3. 跑图支线 ----------------
-    "scene_eventlab": {
-        "scene_menu_creative": {"action": "key", "value": "esc"},
-        "scene_play_event":    {"action": "click_image", "value": "btn_play_event.png"}
-    },
-    "scene_play_event": {
-        "scene_eventlab":      {"action": "key", "value": "esc"}
-    },
-    # ---------------- 4. 房屋 ----------------
+    # ---------------- 2. 房屋 ----------------
     "scene_confirmation_home": {
-        "scene_hub_buy_sell": {"action": "key", "value": "enter"}
+        "scene_hub_buy_sell": {"action": "click_image", "value": "dialog_yes_selected.png"},
+        "scene_menu_horizon": {"action": "click_image", "value": "dialog_no_selected.png"}
     },
     "scene_home_garage": {
         "scene_free_roam":     {"action": "key", "value": "esc"},
@@ -117,9 +97,10 @@ UI_GRAPH = {
         "scene_hub_character": {"action": "key", "value": "pagedown"}
     },
 
-    # ---------------- 5. 枢纽（嘉年华或房屋） ----------------
+    # ---------------- 3. 枢纽（嘉年华或房屋） ----------------
     "scene_confirmation_festival": {
-        "scene_hub_buy_sell": {"action": "key", "value": "enter"}
+        "scene_hub_buy_sell": {"action": "click_image", "value": "dialog_yes_selected.png"},
+        "scene_menu_cars": {"action": "click_image", "value": "dialog_no_selected.png"}
     },
     "scene_hub_campaign": {
         "scene_free_roam":     {"action": "key", "value": "esc"},
@@ -139,5 +120,28 @@ UI_GRAPH = {
         "scene_free_roam":     {"action": "key", "value": "esc"},
         "scene_hub_campaign":  {"action": "key", "value": "pagedown"}
     },
+
+    # ---------------- 4. 买车支线 ----------------
+    "scene_coll_journal": {
+        "scene_menu_campaign":   {"action": "key", "value": "esc"}, # 退出返回
+        "scene_master_explorer": {"action": "click_image", "value": "btn_master_explorer.png"} # 继续深入
+    },
+    "scene_master_explorer": {
+        "scene_coll_journal":    {"action": "key", "value": "esc"},
+        "scene_car_collection":  {"action": "click_image", "value": "btn_car_collection_white.png"}
+    },
+    "scene_car_collection": {
+        "scene_master_explorer": {"action": "key", "value": "esc"}
+    },
+
+    # ---------------- 5. 跑图支线 ----------------
+    "scene_eventlab": {
+        "scene_menu_creative": {"action": "key", "value": "esc"},
+        "scene_play_event":    {"action": "click_image", "value": "btn_play_event.png"}
+    },
+    "scene_play_event": {
+        "scene_eventlab":      {"action": "key", "value": "esc"}
+    },
+    
 
 }

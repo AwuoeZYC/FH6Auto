@@ -76,6 +76,7 @@ class FH_UltimateBot(ctk.CTk):
                         "info_panel_img": "panel_info_Subaru_22B.png"
                     },
                     "mastery": {
+                        "required_sp": 30,
                         "anchor_img": "car_Subaru_22B_new.png",
                         "features": {
                             "text_1998_Subaru.png": True,                            
@@ -704,8 +705,6 @@ class FH_UltimateBot(ctk.CTk):
         
         self.start_time = time.monotonic()
         self.update_timer_loop()
-        
-        self.controller.start_pipeline(start_step, self.config)
 
     def on_controller_stopped(self):
         """当后台控制核心停止或遭遇熔断时，安全恢复大视窗界面结构"""

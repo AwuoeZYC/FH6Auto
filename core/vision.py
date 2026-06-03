@@ -73,27 +73,6 @@ class VisionEngine:
             self.template_cache[actual_path] = tpl
         return tpl
 
-    # def get_scaled_template(self, template_path: str, scale_x: float, scale_y: float) -> np.ndarray:
-    #     """支持 X 轴与 Y 轴独立非等比缩放的模板生成"""
-    #     if scale_x <= 0 or scale_y <= 0:
-    #         return None
-            
-    #     # 原生 1:1 拦截，避免 OpenCV 重新插值导致图像变糊
-    #     if abs(scale_x - 1.0) < 0.01 and abs(scale_y - 1.0) < 0.01:
-    #         return self.load_template(template_path)
-
-    #     mem_key = (template_path, round(scale_x, 3), round(scale_y, 3))
-    #     if mem_key in self.scaled_template_cache:
-    #         return self.scaled_template_cache[mem_key]
-
-    #     template_orig = self.load_template(template_path)
-    #     if template_orig is None: 
-    #         return None
-
-    #     tpl = cv2.resize(template_orig, None, fx=scale_x, fy=scale_y, interpolation=cv2.INTER_AREA)
-    #     self.scaled_template_cache[mem_key] = tpl
-    #     return tpl
-
     def capture_region(self, region: tuple = None) -> np.ndarray:
         """捕获屏幕区域，返回 BGR 格式的 numpy 数组"""
         try:

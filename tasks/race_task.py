@@ -1,10 +1,11 @@
 import time
-from logic.base_task import BaseTask
+from tasks.base_task import BaseTask
+from tasks.mixins import VehicleSelectorMixin
 from core.image_utils import find_with_roi_features
 
-class RaceTask(BaseTask):
+class RaceTask(VehicleSelectorMixin, BaseTask):
     """
-    全自动循环跑图任务 (严谨非阻塞状态机版)
+    全自动循环跑图任务 (多继承 Mixin 极简版)
     """
     def __init__(self, ctx, target_count):
         super().__init__(ctx, target_count)
@@ -14,12 +15,7 @@ class RaceTask(BaseTask):
         
         self.race_start_time = 0.0
         self.e_presses = 0
-        
-        # 微循环与延时动作追踪
         self.char_idx = 0
-        self.last_action_time = 0.0
-        self.scroll_count = 0
-        self.last_scroll_time = 0.0
 
     # ================= 1. 导航与搜索蓝图 =================
     def state_init(self):
@@ -34,7 +30,7 @@ class RaceTask(BaseTask):
         self.change_state("navigating_to_eventlab")
 
     def state_navigating_to_eventlab(self):
-        if not self.action_executed:
+        if not getattr(self, "action_executed", False):
             curr = self.ctx.navigator.identify_scene()
             self.ctx.router.start_navigation(curr, "scene_play_event")
             self.action_executed = True
@@ -47,7 +43,7 @@ class RaceTask(BaseTask):
             return False
 
     def state_open_search_menu(self):
-        if not self.action_executed:
+        if not getattr(self, "action_executed", False):
             self.ctx.interaction.press_key("backspace")
             self.action_executed = True
             
@@ -68,7 +64,7 @@ class RaceTask(BaseTask):
 
     def state_input_share_code(self):
         if self.ctx.find_image("title_code.png"):
-            if not self.action_executed:
+            if not getattr(self, "action_executed", False):
                 self.ctx.log(f"⌨️ 正在输入蓝图代码: {self.share_code}...")
                 self.char_idx = 0
                 self.last_action_time = time.monotonic()
@@ -92,7 +88,6 @@ class RaceTask(BaseTask):
         if pos:
             self.ctx.log("确认搜索...")
             self.ctx.interaction.game_click(pos)
-            # 点击后无需原地等待，直接进入下一状态，由下个状态的图像识别接管加载延迟
             self.change_state("enter_event_info")
         else:
             self.log_throttled("⏳ 等待搜索确认按钮...")
@@ -118,83 +113,51 @@ class RaceTask(BaseTask):
     def state_car_select_initial_check(self):
         if self.time_in_state < 3.0: return
         
-        # 【升级】：直接调用最新的高阶 ROI 特征引擎！
-        anchor_img = self.get_asset("anchor_img")
-        features = self.get_features()
-        pos = find_with_roi_features(self.ctx, anchor_image=anchor_img, features=features, padding=40)
-        
-        if pos:
-            self.ctx.log("🎯 成功识别到目标车辆！")
-            self.ctx.interaction.game_click(pos)
-            self.change_state("wait_for_race_prep")
-        elif self.time_in_state > 6.0:
-            if not getattr(self, "action_executed", False):
-                self.ctx.log("当前界面未找到目标车辆，退回品牌列表寻找...")
-                self.ctx.interaction.press_key("backspace")
-                self.action_executed = True
-                self.last_action_time = time.monotonic()
-                
-            if time.monotonic() - self.last_action_time > 0.5:
-                self.change_state("find_brand")
-        else:
-            self.log_throttled("🔍 扫描车辆中...")
-
-    def state_find_brand(self):
-        brand_img = self.get_asset("brand_img", is_global=True)
-        pos = self.ctx.find_image(brand_img)
-        if pos:
-            self.ctx.interaction.game_click(pos)
-            self.change_state("car_select_scroll")
-        else:
-            if self.time_in_state > 0.3 and not self.action_executed:
-                self.log_throttled("未找到指定品牌，向上滚动...")
-                self.ctx.interaction.press_key("up")
-                self.state_start_time = time.monotonic()
-
-    def state_car_select_scroll(self):
-        title_img = self.get_asset("title_img", is_global=True)
-        if not self.ctx.find_image(title_img):
-            self.ctx.log("🚨 已经滑出指定品牌范围，未能找到指定车辆，任务异常终止！")
-            return False
-            
-        # ==================================================
-        # 【核心隔离墙】：一旦点击过，死死锁住，绝不允许再执行找图运算！
-        # ==================================================
+        # 隔离墙：点到车后锁定并延时流转
         if getattr(self, "action_executed", False):
             if time.monotonic() - self.last_action_time > 0.5:
                 self.ctx.interaction.press_key("enter")
                 self.change_state("wait_for_race_prep")
-            return None # 必须 return，拦截下方逻辑
+            return None
 
-        # ==================================================
-        # 【找车与滚动逻辑】
-        # ==================================================
         anchor_img = self.get_asset("anchor_img")
         features = self.get_features()
-        pos = find_with_roi_features(self.ctx, anchor_image=anchor_img, features=features, padding=40)
-
+        
+        # 使用和 Mixin 同等严格的 0.9 阈值，彻底阻断假阳性！
+        pos = find_with_roi_features(
+            self.ctx, 
+            anchor_image=anchor_img, 
+            features=features, 
+            anchor_threshold=0.6, 
+            feature_threshold=0.8, 
+            padding=5)
+        
         if pos:
-            self.scroll_active = False
-            self.ctx.log("🎯 成功在列表中找到指定车辆！")
+            self.ctx.log("🎯 成功识别到目标车辆！")
             self.ctx.interaction.game_click(pos)
             self.action_executed = True
             self.last_action_time = time.monotonic()
+        elif self.time_in_state > 6.0:
+            if not getattr(self, "backspace_pressed", False):
+                self.ctx.log("当前界面未找到目标车辆，退回品牌列表寻找...")
+                self.ctx.interaction.press_key("backspace")
+                self.backspace_pressed = True
+                self.last_action_time = time.monotonic()
+                
+            elif time.monotonic() - self.last_action_time > 0.5:
+                self.backspace_pressed = False
+                self.change_state("find_brand") # <-- 流转进 Mixin 的找品牌阶段！
         else:
-            if not getattr(self, "scroll_active", False):
-                self.scroll_count = 0
-                self.last_scroll_time = time.monotonic()
-                self.scroll_active = True
-            
-            now = time.monotonic()
-            if self.scroll_count < 4:
-                if now - self.last_scroll_time > 0.1:
-                    self.ctx.interaction.press_key("right")
-                    self.scroll_count += 1
-                    self.last_scroll_time = now
-                    self.log_throttled("未看到指定车辆，向右滚动...")
-            else:
-                if now - self.last_scroll_time > 0.5:
-                    self.scroll_active = False
+            self.log_throttled("🔍 扫描车辆中...")
+
+    # ================= Mixin 钩子实现 =================
+    def on_vehicle_selected(self):
+        self.ctx.interaction.press_key("enter")
+        self.change_state("wait_for_race_prep")
+
+    def on_no_more_vehicles(self):
+        self.ctx.log("🚨 已经滑出指定品牌范围，未能找到指定车辆，任务异常终止！")
+        self.change_state("finish_and_return")
 
     # ================= 3. 赛事准备与起跑 =================
     def state_wait_for_race_prep(self):
@@ -203,8 +166,8 @@ class RaceTask(BaseTask):
             self.ctx.log(f"🏁 第 {self.current_count + 1}/{self.target_count} 场比赛准备完毕，点击开始！")
             self.ctx.interaction.game_click(pos)
             self.change_state("racing_start")
-        else:
-            self.log_throttled("⏳ 等待赛事加载与开始按钮...")
+        # else:
+        #     self.log_throttled("⏳ 等待赛事加载与开始按钮...")
 
     def state_racing_start(self):
         if self.time_in_state > 3.0:
@@ -216,7 +179,6 @@ class RaceTask(BaseTask):
         else:
             self.log_throttled("🚥 等待起步动画...")
 
-    # ================= 4. 纯净的非阻塞跑图状态机 =================
     def state_racing_loop(self):
         elap = time.monotonic() - self.race_start_time
         if elap >= 3.0 and self.e_presses == 0:
@@ -232,13 +194,11 @@ class RaceTask(BaseTask):
                 self.ctx.log("🏁 比赛结束！松开油门。")
                 self.ctx.interaction.key_up("w")
                 self.change_state("race_end_action")
-            # else:
-            #     self.log_throttled("🏎️ 自动驾驶中，随时监控结算画面...")
 
-    # ================= 5. 结算与收尾 =================
+    # ================= 4. 结算与收尾 =================
     def state_race_end_action(self):
         if self.current_count >= self.target_count - 1:
-            if not self.action_executed:
+            if not getattr(self, "action_executed", False):
                 self.ctx.log("🎉 所有跑图次数已完成，选择继续并退出...")
                 self.ctx.interaction.press_key("enter")
                 self.action_executed = True
@@ -248,7 +208,7 @@ class RaceTask(BaseTask):
                 self.update_progress("循环跑图")
                 self.change_state("check_thumb_up")
         else:
-            if not self.action_executed:
+            if not getattr(self, "action_executed", False):
                 self.ctx.log("🔁 跑图未达标，准备重新开始本赛事...")
                 self.ctx.interaction.press_key("x")
                 self.action_executed = True
@@ -274,7 +234,7 @@ class RaceTask(BaseTask):
             self.change_state("finish_and_return")
             
     def state_finish_and_return(self):
-        if not self.action_executed:
+        if not getattr(self, "action_executed", False):
             self.ctx.log("📍 赛事完全结束，退回主菜单...")
             curr = self.ctx.navigator.identify_scene()
             if curr == "scene_unknown":

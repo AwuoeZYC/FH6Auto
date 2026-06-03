@@ -122,7 +122,11 @@ class UIRouter:
 
     def _execute_action(self):
         """单步动作下发"""
-        if self.step_idx >= len(self.path): return
+        if self.step_idx >= len(self.path): 
+            # 当所有动作下发完毕，记录当前时间，用于终点核验的稳定缓冲
+            self.wait_start = time.monotonic() 
+            return
+            
         next_node, action_type, action_value = self.path[self.step_idx]
         
         if action_type == "key":
@@ -133,7 +137,7 @@ class UIRouter:
                 self.ctx.interaction.game_click(pos)
             else:
                 self.ctx.log(f"🚨 寻路中断：无法在画面中找到所需的互动按钮 [{action_value}]")
-                self.wait_start = 0 # 强制设为超时，交由 tick 触发纠错
+                self.wait_start = 0 
                 return
 
         self.wait_start = time.monotonic()
@@ -165,7 +169,14 @@ class UIRouter:
         if self.status != "RUNNING":
             return self.status
 
+        # ==================================================
+        # 1. 到达核验 (带 UI 缓冲墙)
+        # ==================================================
         if self.step_idx >= len(self.path):
+            # 走完最后一步后，强制等游戏动画飞 0.5 秒，再睁开眼睛看！
+            if time.monotonic() - getattr(self, "wait_start", 0) < 0.5:
+                return self.status
+
             if self.verify_node(self.target_node):
                 self.ctx.log(f"🎯 寻路完成且核验通过！成功抵达终点: {self.target_node}")
                 self.status = "SUCCESS"
@@ -174,6 +185,9 @@ class UIRouter:
                 self._handle_failure()
             return self.status
 
+        # ==================================================
+        # 2. 单步过程核验
+        # ==================================================
         next_node, action_type, action_value = self.path[self.step_idx]
         
         edge_info = UI_GRAPH.get(self.curr_node, {}).get(next_node, {})
@@ -189,6 +203,8 @@ class UIRouter:
             self.step_idx += 1
             if self.step_idx < len(self.path):
                 self._execute_action()
+            else:
+                self.wait_start = time.monotonic() # 走完最后一步，开始计时缓冲
             return self.status
 
         # 2. 吞键防抖

@@ -168,6 +168,8 @@ class BotController:
 
     def start_pipeline(self, start_step: str, global_config: dict):
         if self._is_running: return
+        # 立刻上锁！绝对禁止在寻找窗口的这 1.5 秒内被二次触发
+        self.set_running_status(True)
             
         self.config = global_config
         self.global_loop_total = int(global_config.get("global_loops", 10))
@@ -176,20 +178,20 @@ class BotController:
         success, region = GameMonitor.check_and_focus_game(self.log)
         if not success or not region:
             self.log("❌ 无法定位游戏窗口，拒绝启动。")
+            self.set_running_status(False) # 找窗口失败，释放锁
             return
             
         self.game_region = region
-        self.set_running_status(True)
         
         self.current_thread = threading.Thread(target=self._run_pipeline_loop, args=(start_step,), daemon=True)
         self.current_thread.start()
 
     def _run_pipeline_loop(self, start_step: str):
         from core.pipeline_manager import PipelineManager
-        from logic.race_task import RaceTask
-        from logic.buy_task import BuyCarTask
-        from logic.car_mastery_task import CarMasteryTask
-        from logic.remove_task import RemoveTask
+        from tasks.race_task import RaceTask
+        from tasks.buy_task import BuyCarTask
+        from tasks.car_mastery_task import CarMasteryTask
+        from tasks.remove_task import RemoveTask
         
         pipeline = PipelineManager(self)
         

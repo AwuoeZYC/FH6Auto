@@ -30,54 +30,40 @@ def calculate_dynamic_roi(ctx, image_name: str, center_pos: tuple, padding: int 
 
 def find_with_roi_features(ctx, anchor_image: str, features: dict, anchor_threshold: float = 0.8, feature_threshold: float = 0.8, padding: int = 20):
     """
-    高级 ROI 复合特征检索引擎 (带人类阅读顺序排序与坐标追踪)。
+    高级 ROI 复合特征检索引擎 (单目标极速最佳匹配版)
+    利用 OpenCV 默认的全局极值检索，消除多目标遍历造成的盲区与性能损耗。
     """
-    # 1. 寻找画面中【所有】符合条件的锚点
-    anchor_positions = ctx.find_all_images(anchor_image, threshold=anchor_threshold)
-    if not anchor_positions:
+    if not ctx.is_running(): 
+        raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！")
+
+    # 1. 回退至极速单次全屏搜索，只取全图最像的那一个锚点
+    anchor_pos = ctx.find_image(anchor_image, threshold=anchor_threshold)
+    if not anchor_pos:
         return None
         
-    # 【核心升级 1】：对找到的所有嫌疑目标进行强制排序！
-    # 按照 Y 坐标（行）优先，X 坐标（列）其次进行排序。
-    # 考虑到同一行可能有几个像素的误差，将 Y 坐标除以 50 取整来进行粗略分行
-    anchor_positions.sort(key=lambda pt: (pt[1] // 50, pt[0]))
+    # 2. 计算该最佳目标的 ROI 区域
+    try:
+        roi_region = calculate_dynamic_roi(ctx, anchor_image, anchor_pos, padding=padding)
+    except Exception as e:
+        ctx.log(f"🚨 ROI计算异常跳过: {e}")
+        return None
 
-    # 2. 遍历所有找到的锚点，挨个进行三维立体查验
-    for i, anchor_pos in enumerate(anchor_positions, 1):
+    # 3. 遍历特征要求字典进行三维查验
+    for feature_img, is_required in features.items():
         if not ctx.is_running(): 
-            raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！") # <--- 直接抛出
-        # ctx.log(f"🔎 正在排查第 {i}/{len(anchor_positions)} 个目标，屏幕坐标: ({anchor_pos[0]}, {anchor_pos[1]})")
+            raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！")
+            
+        # 排斥特征（False）依然保持极高敏感度
+        current_thresh = feature_threshold if is_required else max(0.6, feature_threshold - 0.15)
         
-        try:
-            roi_region = calculate_dynamic_roi(ctx, anchor_image, anchor_pos, padding=padding)
-        except Exception as e:
-            ctx.log(f"🚨 ROI计算异常跳过: {e}")
-            continue
-
-        # 3. 遍历特征要求字典进行查验
-        anchor_valid = True
-        for feature_img, is_required in features.items():
-            
-            # 【核心升级 2】：如果是排斥特征（False），降低阈值使其极其敏感，宁可错杀绝不漏放卖掉新车！
-            current_thresh = feature_threshold if is_required else max(0.6, feature_threshold - 0.15)
-            
-            feat_pos = ctx.find_image(feature_img, region=roi_region, threshold=current_thresh)
-            
-            if is_required:
-                if not feat_pos:
-                    # ctx.log(f"   ❌ 排除: 缺少必须特征 [{feature_img}]")
-                    anchor_valid = False
-                    break
-            else:
-                if feat_pos:
-                    # ctx.log(f"   ❌ 排除: 发现了排斥特征 [{feature_img}] (相似度过高)")
-                    anchor_valid = False
-                    break
+        feat_pos = ctx.find_image(feature_img, region=roi_region, threshold=current_thresh)
+        
+        if is_required:
+            if not feat_pos:
+                return None  # 缺少必须特征，直接否定当前最佳目标
+        else:
+            if feat_pos:
+                return None  # 发现了排斥特征，直接否定当前最佳目标
                 
-        # 4. 如果该锚点经受住了所有特征验证，则直接返回该锚点坐标
-        if anchor_valid:
-            # ctx.log(f"🎯 【视觉引擎】 完美锁定目标！坐标: ({anchor_pos[0]}, {anchor_pos[1]})")
-            return anchor_pos
-            
-    # 所有嫌疑目标都排查完了，没一个符合要求的
-    return None
+    # 4. 经受住所有特征验证，返回坐标
+    return anchor_pos
