@@ -129,7 +129,7 @@ class BotController:
             base_w, base_h, fast_mode, full_screen_size=(gw, gh)
         )
 
-    def check_image_in_buffer(self, screen_bgr, template_name: str, threshold: float = 0.68) -> bool:
+    def check_image_in_buffer(self, screen_bgr, template_name: str, threshold: float = 0.8) -> bool:
         base_w, base_h = self.base_res
         folder = self.vision._get_aspect_ratio_folder(base_w, base_h)
         actual_path = self.vision._resolve_template_path(self.search_dirs, folder, template_name)
@@ -189,6 +189,7 @@ class BotController:
         from logic.race_task import RaceTask
         from logic.buy_task import BuyCarTask
         from logic.car_mastery_task import CarMasteryTask
+        from logic.sell_task import SellTask
         
         pipeline = PipelineManager(self)
         
@@ -196,7 +197,7 @@ class BotController:
         pipeline.register_task("race", RaceTask, "race_count", "chk_1", "next_1")
         pipeline.register_task("buy", BuyCarTask, "buy_count", "chk_2", "next_2")
         pipeline.register_task("mastery", CarMasteryTask, "mastery_count", "chk_3", "next_3")
-        # pipeline.register_task("sell", SellTask, "sc_count", "chk_4", "next_4")
+        pipeline.register_task("sell", SellTask, "sell_count", "chk_4", "next_4")
 
         pipeline.run_pipeline(start_step)
         

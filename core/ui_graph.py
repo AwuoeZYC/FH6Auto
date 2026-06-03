@@ -35,7 +35,7 @@ NODE_IDENTIFIERS = {
     # --- 枢纽（嘉年华或房屋） ---
     "scene_hub_campaign": {"mode": "ANY", "images": ["opt_drive_selected.png", "opt_drive_normal.png"]},
     "scene_hub_buy_sell": {"mode": "ANY", "images": ["opt_car_pass_selected.png", "opt_car_pass_normal.png"]},
-    "scene_hub_cars": {"mode": "ANY", "images": ["opt_my_cars_normal.png", "opt_my_cars_selected.png", "opt_upgrades_tuning_normal.png", "opt_upgrades_tuning_selected.png"]},
+    "scene_hub_cars": {"mode": "ANY", "images": ["opt_design_normal.png", "opt_design_selected.png", "opt_upgrades_tuning_normal.png", "opt_upgrades_tuning_selected.png"]},
     "scene_hub_character": {"mode": "ANY", "images": ["opt_character_normal.png", "opt_character_selected.png"]},
 }
 

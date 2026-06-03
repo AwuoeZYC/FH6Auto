@@ -1,5 +1,6 @@
 import time
 from logic.base_task import BaseTask
+from core.image_utils import find_with_roi_features
 
 class RaceTask(BaseTask):
     """
@@ -113,40 +114,26 @@ class RaceTask(BaseTask):
             self.change_state("car_select_initial_check")
         else:
             self.log_throttled("⏳ 等待单人游戏选项...")
-
-    def _is_target_car_on_screen(self):
-        """动态特征校验，彻底消灭斯巴鲁"""
-        anchor_img = self.get_asset("anchor_img")
-        features = self.get_features()
-        
-        car_pos = self.ctx.find_image(anchor_img, threshold=0.6)
-        if not car_pos: return None
-        
-        # 自动遍历该车辆该状态下必须符合的所有特征
-        for feat_img, is_required in features.items():
-            feat_pos = self.ctx.find_image(feat_img, threshold=0.8)
-            if is_required and not feat_pos: return None
-            if not is_required and feat_pos: return None
-            
-        return car_pos
-
+    
     def state_car_select_initial_check(self):
         if self.time_in_state < 3.0: return
         
-        pos = self._is_target_car_on_screen()
+        # 【升级】：直接调用最新的高阶 ROI 特征引擎！
+        anchor_img = self.get_asset("anchor_img")
+        features = self.get_features()
+        pos = find_with_roi_features(self.ctx, anchor_image=anchor_img, features=features, padding=40)
+        
         if pos:
-            self.ctx.log("🎯 成功识别到指定车辆！")
+            self.ctx.log("🎯 成功识别到目标车辆！")
             self.ctx.interaction.game_click(pos)
-            # 修复点：既然点中了当前车辆，游戏会自动进加载界面，直接流转
             self.change_state("wait_for_race_prep")
         elif self.time_in_state > 6.0:
-            if not self.action_executed:
+            if not getattr(self, "action_executed", False):
                 self.ctx.log("当前界面未找到目标车辆，退回品牌列表寻找...")
                 self.ctx.interaction.press_key("backspace")
                 self.action_executed = True
                 self.last_action_time = time.monotonic()
                 
-            # 修复点：使用独立时间戳判断
             if time.monotonic() - self.last_action_time > 0.5:
                 self.change_state("find_brand")
         else:
@@ -170,23 +157,33 @@ class RaceTask(BaseTask):
             self.ctx.log("🚨 已经滑出指定品牌范围，未能找到指定车辆，任务异常终止！")
             return False
             
-        pos = self._is_target_car_on_screen()
-        if pos:
-            if not self.action_executed:
-                self.ctx.log("🎯 成功在列表中找到指定车辆！")
-                self.ctx.interaction.game_click(pos)
-                self.action_executed = True
-                self.last_action_time = time.monotonic()
-            
-            # 在列表中点击后，需要补按回车。这里使用准确的独立时间戳。
+        # ==================================================
+        # 【核心隔离墙】：一旦点击过，死死锁住，绝不允许再执行找图运算！
+        # ==================================================
+        if getattr(self, "action_executed", False):
             if time.monotonic() - self.last_action_time > 0.5:
                 self.ctx.interaction.press_key("enter")
                 self.change_state("wait_for_race_prep")
+            return None # 必须 return，拦截下方逻辑
+
+        # ==================================================
+        # 【找车与滚动逻辑】
+        # ==================================================
+        anchor_img = self.get_asset("anchor_img")
+        features = self.get_features()
+        pos = find_with_roi_features(self.ctx, anchor_image=anchor_img, features=features, padding=40)
+
+        if pos:
+            self.scroll_active = False
+            self.ctx.log("🎯 成功在列表中找到指定车辆！")
+            self.ctx.interaction.game_click(pos)
+            self.action_executed = True
+            self.last_action_time = time.monotonic()
         else:
-            if not self.action_executed:
+            if not getattr(self, "scroll_active", False):
                 self.scroll_count = 0
                 self.last_scroll_time = time.monotonic()
-                self.action_executed = True
+                self.scroll_active = True
             
             now = time.monotonic()
             if self.scroll_count < 4:
@@ -197,8 +194,7 @@ class RaceTask(BaseTask):
                     self.log_throttled("未看到指定车辆，向右滚动...")
             else:
                 if now - self.last_scroll_time > 0.5:
-                    self.action_executed = False
-                    self.state_start_time = time.monotonic()
+                    self.scroll_active = False
 
     # ================= 3. 赛事准备与起跑 =================
     def state_wait_for_race_prep(self):

@@ -96,9 +96,7 @@ class UIRouter:
         self.attempt = 1
 
         self.ctx.log("⚡ 发送防挂机唤醒信号...")
-        gx, gy, _, _ = self.ctx.game_region
-        hw_driver.hw_mouse_move(gx + 5, gy + 5)
-        hw_driver.hw_mouse_move(gx, gy)
+        self.ctx.interaction.anti_afk_wake()
         
         self._plan_route()
 
@@ -179,7 +177,7 @@ class UIRouter:
         next_node, action_type, action_value = self.path[self.step_idx]
         
         edge_info = UI_GRAPH.get(self.curr_node, {}).get(next_node, {})
-        edge_timeout = edge_info.get("timeout", 8.0)
+        edge_timeout = edge_info.get("timeout", 15.0)
         retry_interval = edge_info.get("retry", 2.5)
 
         now = time.monotonic()
@@ -195,7 +193,7 @@ class UIRouter:
 
         # 2. 吞键防抖
         if now - self.last_retry > retry_interval:
-            self.ctx.log(f"⚠️ 疑似长加载或吞键，重试动作前往 [{next_node}]...")
+            # self.ctx.log(f"⚠️ 疑似长加载或吞键，重试动作前往 [{next_node}]...")
             if action_type == "key":
                 self.ctx.interaction.press_key(action_value)
             elif action_type == "click_image":

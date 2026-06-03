@@ -98,7 +98,7 @@ class CarMasteryTask(BaseTask):
         if not self.ctx.find_image(title_img):
             self.ctx.log("🚨 已经滑出指定品牌范围，未能找到全新指定车辆，任务结束！")
             return True 
-
+        
         # 2. 多点遍历防漏检引擎
         pos = find_with_roi_features(self.ctx, anchor_image=anchor_img, features=features, padding=20)
 
@@ -150,7 +150,7 @@ class CarMasteryTask(BaseTask):
     def state_get_in_car(self):
         pos = self.ctx.find_any_image(["opt_get_in_normal.png", "opt_get_in_selected.png"])
         if pos:
-            self.ctx.log("找到驾驶选项，点击上车...")
+            self.ctx.log("找到上车选项，点击上车...")
             self.ctx.interaction.game_click(pos)
             self.last_action_time = time.monotonic()
             self.change_state("wait_and_back_to_hub")
@@ -250,7 +250,7 @@ class CarMasteryTask(BaseTask):
                 self.last_action_time = now
         elif self.skill_step == 2:
             # 给予技能解锁动画的等待时间
-            if now - self.last_action_time > 1.2:
+            if now - self.last_action_time > 0.6:
                 self.skill_idx += 1
                 self.skill_step = 0
                 self.last_action_time = now

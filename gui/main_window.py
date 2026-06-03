@@ -67,7 +67,8 @@ class FH_UltimateBot(ctk.CTk):
                         "anchor_img": "car_Subaru_22B_liked.png",
                         "features": {
                             "text_1998_Subaru.png": True,
-                            "tag_liked.png": True
+                            "tag_legendary.png": True,
+                            "tag_liked.png": True,
                         }
                     },
                     "buy": {
@@ -77,17 +78,19 @@ class FH_UltimateBot(ctk.CTk):
                     "mastery": {
                         "anchor_img": "car_Subaru_22B_new.png",
                         "features": {
-                            "text_1998_Subaru.png": True,
+                            "text_1998_Subaru.png": True,                            
+                            "tag_rank_B_600.png": True,
+                            "tag_legendary.png": True,
                             "tag_new_car.png": True,
-                            "tag_rank_B.png": True,
-                            "tag_legendary.png": True
                         }
                     },
                     "sell": {
                         "anchor_img": "car_Subaru_22B_used.png",
                         "features": {
                             "text_1998_Subaru.png": True,
-                            "tag_new_car.png": False
+                            "tag_rank_B_600.png": True,
+                            "tag_legendary.png": True,
+                            "tag_new_car.png": False,
                         }
                     }
                 }
@@ -100,7 +103,7 @@ class FH_UltimateBot(ctk.CTk):
             "race_count": 99,
             "buy_count": 30,
             "mastery_count": 30,
-            "sc_count": 30,
+            "sell_count": 30,
             "chk_1": True,
             "chk_2": True,
             "chk_3": True,
@@ -237,7 +240,7 @@ class FH_UltimateBot(ctk.CTk):
             self.config["race_count"] = int(self.entry_race.get())
             self.config["buy_count"] = int(self.entry_car.get())
             self.config["mastery_count"] = int(self.entry_mastery.get())
-            self.config["sc_count"] = int(self.entry_sc.get())
+            self.config["sell_count"] = int(self.entry_sc.get())
             self.config["global_loops"] = int(self.entry_global_loop.get())
             self.config["share_code"] = "".join(c for c in self.entry_share.get() if c.isdigit())
             self.config["next_1"] = int(self.entry_next1.get())
@@ -438,7 +441,7 @@ class FH_UltimateBot(ctk.CTk):
 
         # 模块 4：移除车辆
         box_sc, self.btn_sc, self.entry_sc, self.lbl_sc = create_box(
-            self.config_frame, "4. 移除车辆", "！！开始！！", lambda: self.ui_trigger_start("sell"), "#D97706", self.config.get("sc_count", 30), "sc_count"
+            self.config_frame, "4. 移除车辆", "！！开始！！", lambda: self.ui_trigger_start("sell"), "#D97706", self.config.get("sell_count", 30), "sell_count"
         )
 
         self.next_frame4, self.entry_next4, self.chk4 = create_next_step(self.config_frame, self.var_chk4, self.config.get("next_4", 1))

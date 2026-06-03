@@ -2,10 +2,10 @@ import time
 import core.input_driver as input_driver
 
 def run_sell(ctx, target_count):
-    if ctx.sc_count >= target_count:
+    if ctx.sell_count >= target_count:
         return True
 
-    ctx.update_running_ui("移除车辆", ctx.sc_count, target_count)
+    ctx.update_running_ui("移除车辆", ctx.sell_count, target_count)
 
     ctx.log("准备验证/进入菜单！！！使用前请人工核验到正常移除车辆再进行自动化移除处理")
     if not ctx.enter_menu():
@@ -131,7 +131,7 @@ def run_sell(ctx, target_count):
 
     ctx.log("开始删除最近获得的车辆！！！请人工确认是否移除")
 
-    while ctx.sc_count < target_count:
+    while ctx.sell_count < target_count:
         ctx.log(f"is_running = {ctx.is_running}")
         if not ctx.is_running:
             return False
@@ -152,8 +152,8 @@ def run_sell(ctx, target_count):
         self.ctx.interaction.press_key("enter")
         time.sleep(0.8)
         
-        ctx.sc_count += 1
-        ctx.log(f"已尝试删除车辆 {ctx.sc_count}/{target_count}")
+        ctx.sell_count += 1
+        ctx.log(f"已尝试删除车辆 {ctx.sell_count}/{target_count}")
 
     for _ in range(3):
         if not ctx.is_running:
