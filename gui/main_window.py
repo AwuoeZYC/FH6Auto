@@ -84,7 +84,7 @@ class FH_UltimateBot(ctk.CTk):
                             "tag_new_car.png": True,
                         }
                     },
-                    "sell": {
+                    "remove": {
                         "anchor_img": "car_Subaru_22B_used.png",
                         "features": {
                             "text_1998_Subaru.png": True,
@@ -103,7 +103,7 @@ class FH_UltimateBot(ctk.CTk):
             "race_count": 99,
             "buy_count": 30,
             "mastery_count": 30,
-            "sell_count": 30,
+            "remove_count": 30,
             "chk_1": True,
             "chk_2": True,
             "chk_3": True,
@@ -133,7 +133,6 @@ class FH_UltimateBot(ctk.CTk):
         
         self.update_skill_grid()
         self.center_window()
-        self.sync_buy_to_sell()
 
         # 异步预热视觉特征引擎，避免阻塞主线程渲染
         def background_init():
@@ -175,17 +174,6 @@ class FH_UltimateBot(ctk.CTk):
         x = (sw - w) // 2
         y = (sh - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
-
-    def sync_buy_to_sell(self, event=None):
-        """同步买车数量与移除车辆数量的输入框数据"""
-        try:
-            val = "".join(c for c in self.entry_car.get() if c.isdigit())
-            if not val:
-                val = "0"
-            self.entry_sc.delete(0, "end")
-            self.entry_sc.insert(0, val)
-        except Exception:
-            pass
 
     def normalize_step_entry(self, entry_widget, default_value):
         """强制规范流水线单步转向序号输入范围为 1 至 4"""
@@ -240,7 +228,7 @@ class FH_UltimateBot(ctk.CTk):
             self.config["race_count"] = int(self.entry_race.get())
             self.config["buy_count"] = int(self.entry_car.get())
             self.config["mastery_count"] = int(self.entry_mastery.get())
-            self.config["sell_count"] = int(self.entry_sc.get())
+            self.config["remove_count"] = int(self.entry_sc.get()) if self.entry_sc.get().isdigit() else 30
             self.config["global_loops"] = int(self.entry_global_loop.get())
             self.config["share_code"] = "".join(c for c in self.entry_share.get() if c.isdigit())
             self.config["next_1"] = int(self.entry_next1.get())
@@ -389,7 +377,6 @@ class FH_UltimateBot(ctk.CTk):
         box_car, self.btn_car, self.entry_car, self.lbl_car = create_box(
             self.config_frame, "2. 批量买车", "开始", lambda: self.ui_trigger_start("buy"), "#2EA043", self.config["buy_count"], "buy_count"
         )
-        self.entry_car.bind("<KeyRelease>", self.sync_buy_to_sell)
 
         self.next_frame2, self.entry_next2, self.chk2 = create_next_step(self.config_frame, self.var_chk2, self.config.get("next_2", 3))
 
@@ -441,9 +428,10 @@ class FH_UltimateBot(ctk.CTk):
 
         # 模块 4：移除车辆
         box_sc, self.btn_sc, self.entry_sc, self.lbl_sc = create_box(
-            self.config_frame, "4. 移除车辆", "！！开始！！", lambda: self.ui_trigger_start("sell"), "#D97706", self.config.get("sell_count", 30), "sell_count"
+            self.config_frame, "4. 移除车辆", "！！开始！！", lambda: self.ui_trigger_start("remove"), "#D97706", self.config.get("remove_count", 30), "remove_count"
         )
 
+        self.entry_sc.bind("<KeyRelease>", lambda e: self.on_entry_change(e, self.entry_sc, self.lbl_sc, "remove_count"))
         self.next_frame4, self.entry_next4, self.chk4 = create_next_step(self.config_frame, self.var_chk4, self.config.get("next_4", 1))
 
         self.profile_frame = ctk.CTkFrame(self, fg_color="#2B2B2B", height=45, corner_radius=10)

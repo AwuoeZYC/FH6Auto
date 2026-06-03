@@ -156,7 +156,7 @@ class CarMasteryTask(BaseTask):
             self.change_state("wait_and_back_to_hub")
         elif self.time_in_state > 2.0:
             if not self.action_executed:
-                self.ctx.log("未看到上车选项，尝试补按回车唤出菜单...")
+                # self.ctx.log("未看到上车选项，尝试补按回车唤出菜单...")
                 self.ctx.interaction.press_key("enter")
                 self.action_executed = True
                 self.last_action_time = time.monotonic()

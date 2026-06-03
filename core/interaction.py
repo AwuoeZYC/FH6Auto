@@ -1,6 +1,10 @@
 import time
 import core.input_driver as hw_driver
 
+# 全局停止异常类
+class BotStoppedException(Exception):
+    pass
+
 class InteractionEngine:
     """
     底层硬件交互引擎 (The Muscle)。
@@ -9,18 +13,21 @@ class InteractionEngine:
     def __init__(self, ctx):
         self.ctx = ctx  # 注入全局 Controller 上下文
 
+    def check_stopped(self):
+        """检查点，一旦停止直接抛出异常，击穿调用栈"""
+        if not self.ctx.is_running():
+            raise BotStoppedException("🚨 系统已收到 F8 停止指令！")
+
     def press_key(self, key: str, delay: float = 0.08):
         """单次按键 (带熔断拦截)"""
-        if not self.ctx.is_running(): 
-            return
+        self.check_stopped()
         hw_driver.hw_key_down(key)
         time.sleep(delay)
         hw_driver.hw_key_up(key)
 
     def key_down(self, key: str):
         """按下不放 (带熔断拦截)"""
-        if not self.ctx.is_running(): 
-            return
+        self.check_stopped()
         hw_driver.hw_key_down(key)
 
     def key_up(self, key: str):
@@ -31,8 +38,8 @@ class InteractionEngine:
         """
         游戏内鼠标点击 (带熔断拦截与防抖偏移)
         """
-        if not self.ctx.is_running() or not pos:
-            return
+        self.check_stopped()
+        if not pos: return
             
         import pydirectinput
         
@@ -41,8 +48,7 @@ class InteractionEngine:
         time.sleep(0.2)
         
         for _ in range(2 if double else 1):
-            if not self.ctx.is_running(): 
-                break # 点击中途发现熔断，立即中断
+            self.check_stopped()
             pydirectinput.mouseDown()
             time.sleep(0.1)
             pydirectinput.mouseUp()
@@ -59,11 +65,10 @@ class InteractionEngine:
         :param steps: 轨迹拆分的步数（帧数）
         :param duration: 整个滑动过程的总耗时（秒）
         """
-        if not self.ctx.is_running(): return
-        
+        self.check_stopped()
         delay_per_step = duration / steps
         for i in range(1, steps + 1):
-            if not self.ctx.is_running(): return # 保持绝对熔断安全
+            self.check_stopped() # 保持绝对熔断安全
             
             # 计算当前步的进度百分比 (0.0 到 1.0)
             t = i / steps
@@ -80,7 +85,7 @@ class InteractionEngine:
         标准防挂机唤醒：在游戏窗口左上角进行一次“去而复返”的平滑滑动。
         总耗时约 0.3 秒，既能保证被游戏引擎识别，又不会导致状态机严重阻塞。
         """
-        if not self.ctx.is_running(): return
+        self.check_stopped()
         
         gx, gy, _, _ = self.ctx.game_region
         

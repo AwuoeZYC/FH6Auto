@@ -1,4 +1,5 @@
 import time
+from core.interaction import BotStoppedException
 
 class BaseTask:
     """
@@ -31,45 +32,43 @@ class BaseTask:
         self.update_progress(self.__class__.__name__)
         self.change_state("init")
 
-        while getattr(self.ctx, 'is_running', lambda: False)():
-            now = time.monotonic()
-            
-            # 全局熔断检查
-            if now - self.task_start_time > self.global_timeout:
-                self.ctx.log("❌ 任务全局超时，强制终止")
-                return False
-
-            # 单一状态死锁检查
-            if self.time_in_state > self.state_timeout:
-                self.ctx.log(f"⚠️ 状态 [{self.current_state}] 停留超时({self.state_timeout}s)，请求断点恢复")
-                return False
-
-            handler_method_name = f"state_{self.current_state}"
-            handler = getattr(self, handler_method_name, None)
-
-            if not handler:
-                self.ctx.log(f"🚨 严重异常：未找到状态处理函数 '{handler_method_name}'")
-                return False
-
-            try:
-                # 状态处理函数返回 True/False 决定退出，返回 None 维持状态流转
-                result = handler()
+        try:
+            while getattr(self.ctx, 'is_running', lambda: False)():
+                now = time.monotonic()
                 
-                if result is True:
-                    self.ctx.log(f"✅ 任务 {self.__class__.__name__} 完成")
-                    return True
-                elif result is False:
-                    self.ctx.log(f"❌ 任务在状态 [{self.current_state}] 返回失败，请求断点恢复")
+                # 全局熔断检查
+                if now - self.task_start_time > self.global_timeout:
+                    self.ctx.log("❌ 任务全局超时，强制终止")
                     return False
-                    
-            except Exception as e:
-                self.ctx.log(f"🔥 状态 [{self.current_state}] 发生未捕获异常: {e}")
-                return False
 
-            # 保持主线程呼吸频率
-            time.sleep(0.05)
+                # 单一状态死锁检查
+                if self.time_in_state > self.state_timeout:
+                    self.ctx.log(f"⚠️ 状态 [{self.current_state}] 停留超时({self.state_timeout}s)，请求断点恢复")
+                    return False
 
-        self.ctx.log("⏹️ 任务已收到系统停止指令。")
+                state_method = getattr(self, f"state_{self.current_state}", None)
+                if state_method:
+                    result = state_method()
+                    if result is True:
+                        return True
+                    elif result is False:
+                        return False
+                else:
+                    self.ctx.log(f"🔥 未知的状态节点: {self.current_state}")
+                    return False
+                
+                time.sleep(0.05)  # 主循环节奏，保持足够频繁以响应 F8 熔断指令，同时避免过度占用 CPU
+        
+        # 不管代码走到哪里，只要抛出这个异常，瞬间就跳到这里安全结束！
+        except BotStoppedException as e:
+            self.ctx.log(str(e))
+            self.ctx.log("⏹️ 任务已响应安全中断指令。")
+            return False
+        
+        except Exception as e:
+            self.ctx.log(f"🔥 状态 [{self.current_state}] 发生未捕获异常: {e}")
+            return False
+        
         return False
 
     def change_state(self, new_state: str):

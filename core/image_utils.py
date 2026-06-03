@@ -1,5 +1,6 @@
 import cv2
 import os
+from core.interaction import BotStoppedException
 
 def calculate_dynamic_roi(ctx, image_name: str, center_pos: tuple, padding: int = 0) -> tuple:
     """
@@ -44,7 +45,7 @@ def find_with_roi_features(ctx, anchor_image: str, features: dict, anchor_thresh
     # 2. 遍历所有找到的锚点，挨个进行三维立体查验
     for i, anchor_pos in enumerate(anchor_positions, 1):
         if not ctx.is_running(): 
-            return None
+            raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！") # <--- 直接抛出
         # ctx.log(f"🔎 正在排查第 {i}/{len(anchor_positions)} 个目标，屏幕坐标: ({anchor_pos[0]}, {anchor_pos[1]})")
         
         try:

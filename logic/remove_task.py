@@ -2,14 +2,14 @@ import time
 from logic.base_task import BaseTask
 from core.image_utils import find_with_roi_features
 
-class SellTask(BaseTask):
+class RemoveTask(BaseTask):
     """
     全自动批量移除车辆任务 (纯非阻塞状态机版)
     利用严格特征提取，自动寻找指定状态的车辆并从车库中安全删除。
     """
     def __init__(self, ctx, target_count):
         super().__init__(ctx, target_count)
-        self.task_id = "sell"  # <--- 严格声明本任务的作用域
+        self.task_id = "remove"  # <--- 严格声明本任务的作用域
         self.state_timeout = 60
         self.scroll_count = 0
         self.last_action_time = 0.0
@@ -140,7 +140,7 @@ class SellTask(BaseTask):
             self.change_state("wait_for_confirm")
         elif self.time_in_state > 2.0:
             if not self.action_executed:
-                self.ctx.log("未看到移除选项，尝试补按回车唤出菜单...")
+                # self.ctx.log("未看到移除选项，尝试补按回车唤出菜单...")
                 self.ctx.interaction.press_key("enter")
                 self.action_executed = True
                 self.last_action_time = time.monotonic()
