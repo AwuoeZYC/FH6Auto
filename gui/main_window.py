@@ -570,18 +570,32 @@ class FH_UltimateBot(ctk.CTk):
     # --- 控制层回调槽函数实现 ---
     # ==========================================
     def log(self, message: str):
-        """线程安全的双日志框行同步写入器"""
+        """线程安全的双日志框行同步写入器 (带防泄漏截断)"""
         curr_time = time.strftime("%H:%M:%S")
         full_msg = f"[{curr_time}] {message}"
 
         def do_write():
+            # 定义最大允许行数，防止 Tkinter 渲染卡死内存溢出
+            MAX_LINES = 500
+
+            # 写入主日志框
             self.log_box.configure(state="normal")
             self.log_box.insert("end", full_msg + "\n")
+            
+            # 获取当前行数，超过则从头部删掉最旧的 100 行
+            if int(self.log_box.index('end-1c').split('.')[0]) > MAX_LINES:
+                self.log_box.delete("1.0", "100.0")
+                
             self.log_box.see("end")
             self.log_box.configure(state="disabled")
             
+            # 写入迷你挂机日志框
             self.mini_log_box.configure(state="normal")
             self.mini_log_box.insert("end", full_msg + "\n")
+            
+            if int(self.mini_log_box.index('end-1c').split('.')[0]) > MAX_LINES:
+                self.mini_log_box.delete("1.0", "100.0")
+                
             self.mini_log_box.see("end")
             self.mini_log_box.configure(state="disabled")
             

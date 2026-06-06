@@ -18,7 +18,7 @@ class BaseTask:
         self.task_start_time = 0.0
         self.action_executed = False  # 动作执行锁，保证进入新状态时触发动作只执行一次
         
-        self.global_timeout = 4200  
+        self.global_timeout = 6000  
         self.state_timeout = 45     
         self.last_log_time = {}     
 

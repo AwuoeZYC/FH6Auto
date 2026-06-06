@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pyautogui
 from PIL import ImageGrab
+import mss  # 极速无泄漏截图库
 
 class VisionEngine:
     """
@@ -16,9 +17,12 @@ class VisionEngine:
         
         self.template_cache = {}
         self.scaled_template_cache = {}
-        self.path_cache = {}  # 新增：绝对路径 IO 缓存，砍掉硬盘寻道时间
+        self.path_cache = {}  # 绝对路径 IO 缓存，砍掉硬盘寻道时间
+
+        # 初始化 MSS 单例对象，复用底层 C 内存分配，杜绝 GDI 句柄泄漏
+        self.sct = mss.mss()
         
-        self.log("VisionEngine initialized.")
+        self.log("VisionEngine initialized with MSS.")
 
     def log(self, msg: str): 
         if self.logger:
@@ -74,19 +78,26 @@ class VisionEngine:
         return tpl
 
     def capture_region(self, region: tuple = None) -> np.ndarray:
-        """捕获屏幕区域，返回 BGR 格式的 numpy 数组"""
+        """【重构】使用 mss 替代 ImageGrab 捕获屏幕区域，返回 BGR 格式"""
         try:
             if region:
                 x, y, w, h = map(int, region)
-                bbox = (x, y, x + w, y + h)
-                screen = ImageGrab.grab(bbox=bbox, all_screens=True)
+                # mss 的区域定义格式
+                monitor = {"top": y, "left": x, "width": w, "height": h}
             else:
-                screen = ImageGrab.grab(all_screens=True)
-        except Exception as e:
-            self.log(f"ImageGrab failed, fallback to pyautogui: {e}")
-            screen = pyautogui.screenshot(region=region)
+                # 0 代表截取全屏（包含多屏拼接区域）
+                monitor = self.sct.monitors[0]
+                
+            # grab 返回的是专门的 mss 对象，极速转换
+            sct_img = self.sct.grab(monitor)
             
-        return cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
+            # 转换为 numpy 数组。mss 默认返回 BGRA 格式，通过切片 [:, :, :3] 直接丢弃透明通道提取 BGR
+            # 这比 cvtColor 快得多，且不会产生多余的内存拷贝
+            return np.array(sct_img)[:, :, :3]
+            
+        except Exception as e:
+            self.log(f"🚨 MSS 截图引擎异常: {e}")
+            return np.array([]) # 返回空数组作为安全兜底
 
     def _do_match(self, screen_bgr: np.ndarray, template_abs_path: str, region: tuple = None, 
                   threshold: float = 0.75, expected_base_w: int = 1024, expected_base_h: int = 768, 
