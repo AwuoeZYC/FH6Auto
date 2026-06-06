@@ -1,5 +1,6 @@
 import time
 from core.interaction import BotStoppedException
+from core.profile_manager import ProfileManager
 
 class BaseTask:
     """
@@ -17,7 +18,7 @@ class BaseTask:
         self.task_start_time = 0.0
         self.action_executed = False  # 动作执行锁，保证进入新状态时触发动作只执行一次
         
-        self.global_timeout = 3600  
+        self.global_timeout = 4200  
         self.state_timeout = 45     
         self.last_log_time = {}     
 
@@ -107,26 +108,23 @@ class BaseTask:
 
     
     def get_asset(self, asset_key: str, is_global: bool = False) -> str:
-        """【严格资产提取器】：无兜底，缺失即引发致命崩溃"""
-        profile = self.ctx.config.get("current_profile")
-        if not profile:
-            raise ValueError("🚨 致命异常：当前任务未找到注入的车辆配置 (current_profile)！请检查主程序流。")
-        
-        if is_global:
-            val = profile.get(asset_key)
-        else:
-            val = profile.get("tasks", {}).get(self.task_id, {}).get(asset_key)
+        """【严格资产提取器】：通过 ProfileManager 直接查询外部 JSON"""
+        target_vid = self.ctx.config.get("target_vehicle")
+        if not target_vid:
+            raise ValueError("🚨 致命异常：全局配置中未找到目标车辆 ID (target_vehicle)！")
             
+        val = ProfileManager().get_asset(target_vid, getattr(self, "task_id", ""), asset_key, is_global)
+        
         if not val:
-            scope = "全局配置" if is_global else f"任务 [{self.task_id}] 专属配置"
-            raise KeyError(f"🚨 致命异常：{scope} 中缺少必须的特征资产 '{asset_key}'！")
+            scope = "全局配置" if is_global else f"任务 [{getattr(self, 'task_id', 'unknown')}] 专属配置"
+            raise KeyError(f"🚨 致命异常：车辆 [{target_vid}] 的 {scope} 中缺少必须的特征资产 '{asset_key}'！")
         return val
 
     def get_features(self) -> dict:
-        """【严格特征提取器】：无兜底，缺失即引发致命崩溃"""
-        profile = self.ctx.config.get("current_profile", {})
-        features = profile.get("tasks", {}).get(self.task_id, {}).get("features")
+        """【严格特征提取器】：通过 ProfileManager 直接查询外部 JSON"""
+        target_vid = self.ctx.config.get("target_vehicle")
+        features = ProfileManager().get_features(target_vid, getattr(self, "task_id", ""))
         
         if features is None:
-            raise KeyError(f"🚨 致命异常：任务 [{self.task_id}] 配置中缺少 'features' 特征字典！")
+            raise KeyError(f"🚨 致命异常：车辆 [{target_vid}] 任务 [{getattr(self, 'task_id', 'unknown')}] 中缺少 'features' 特征字典！")
         return features

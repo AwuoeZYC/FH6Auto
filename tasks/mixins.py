@@ -48,13 +48,15 @@ class VehicleSelectorMixin:
         anchor_img = self.get_asset("anchor_img")
         features = self.get_features()
 
+        scan_mode = getattr(self, "scan_mode", "fast")
         pos = find_with_roi_features(
             self.ctx, 
             anchor_image=anchor_img, 
             features=features, 
             anchor_threshold=0.9, 
             feature_threshold=0.9, 
-            padding=5
+            padding=5,
+            scan_mode=scan_mode
             )
 
         if pos:

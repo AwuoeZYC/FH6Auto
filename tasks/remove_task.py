@@ -11,6 +11,7 @@ class RemoveTask(VehicleSelectorMixin, BaseTask):
         super().__init__(ctx, target_count)
         self.task_id = "remove"  
         self.state_timeout = 60
+        self.scan_mode = "comprehensive"
 
     def state_init(self):
         if self.current_count == 0 and self.time_in_state < 0.5: return None

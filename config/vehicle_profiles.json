@@ -1,0 +1,42 @@
+{
+  "Subaru_22B": {
+    "display_name": "斯巴鲁 Impreza 22B (1998)",
+    "brand_img": "brand_Subaru.png",
+    "title_img": "title_Subaru.png",
+    "cost_cr": 81700,
+    "skill_sp": 30,
+    "tasks": {
+      "race": {
+        "anchor_img": "car_Subaru_22B_liked.png",
+        "features": {
+          "text_1998_Subaru.png": true,
+          "tag_legendary.png": true,
+          "tag_liked.png": true
+        }
+      },
+      "buy": {
+        "anchor_img": "car_Subaru_22B_collection.png",
+        "info_panel_img": "panel_info_Subaru_22B.png"
+      },
+      "mastery": {
+        "required_sp": 30,
+        "anchor_img": "car_Subaru_22B_new.png",
+        "features": {
+          "text_1998_Subaru.png": true,
+          "tag_rank_B_600.png": true,
+          "tag_legendary.png": true,
+          "tag_new_car.png": true
+        }
+      },
+      "remove": {
+        "anchor_img": "car_Subaru_22B_used.png",
+        "features": {
+          "text_1998_Subaru.png": true,
+          "tag_rank_B_600.png": true,
+          "tag_legendary.png": true,
+          "tag_new_car.png": false
+        }
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ import webbrowser
 import requests
 import customtkinter as ctk
 from PIL import Image
+from core.profile_manager import ProfileManager
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -57,65 +58,26 @@ class FH_UltimateBot(ctk.CTk):
         self.support_win = None
         self.start_time = 0.0
 
-        self.vehicle_profiles = {
-            "Subaru_22B": {
-                "display_name": "斯巴鲁 Impreza 22B (1998)",
-                "brand_img": "brand_Subaru.png",
-                "title_img": "title_Subaru.png",
-                "tasks": {
-                    "race": {
-                        "anchor_img": "car_Subaru_22B_liked.png",
-                        "features": {
-                            "text_1998_Subaru.png": True,
-                            "tag_legendary.png": True,
-                            "tag_liked.png": True,
-                        }
-                    },
-                    "buy": {
-                        "anchor_img": "car_Subaru_22B_collection.png",
-                        "info_panel_img": "panel_info_Subaru_22B.png"
-                    },
-                    "mastery": {
-                        "required_sp": 30,
-                        "anchor_img": "car_Subaru_22B_new.png",
-                        "features": {
-                            "text_1998_Subaru.png": True,                            
-                            "tag_rank_B_600.png": True,
-                            "tag_legendary.png": True,
-                            "tag_new_car.png": True,
-                        }
-                    },
-                    "remove": {
-                        "anchor_img": "car_Subaru_22B_used.png",
-                        "features": {
-                            "text_1998_Subaru.png": True,
-                            "tag_rank_B_600.png": True,
-                            "tag_legendary.png": True,
-                            "tag_new_car.png": False,
-                        }
-                    }
-                }
-            }
-        }
+        ProfileManager().load_profiles()
 
         # 初始化应用静态默认配置
         self.config = {
             "target_vehicle": "Subaru_22B",
             "race_count": 99,
-            "buy_count": 30,
-            "mastery_count": 30,
-            "remove_count": 30,
+            "buy_count": 33,
+            "mastery_count": 33,
+            "remove_count": 33,
             "chk_1": True,
             "chk_2": True,
             "chk_3": True,
             "chk_4": True,
             "next_1": 2,
             "next_2": 3,
-            "next_3": 1,
+            "next_3": 4,
             "next_4": 1,
             "global_loops": 10,
             "skill_dirs": ["right", "up", "up", "up", "left"],
-            "share_code": "890169683",
+            "share_code": "170516901",
             "auto_restart": False,
             "restart_cmd": "start steam://run/2483190",
             "base_width": 1024,  
@@ -442,17 +404,19 @@ class FH_UltimateBot(ctk.CTk):
         ctk.CTkLabel(self.profile_frame, text="🚗 目标刷取车辆:", font=ctk.CTkFont(weight="bold", size=15), text_color="#3498DB").pack(side="left", padx=(15, 10))
 
         # 1. 动态提取所有可选车辆的内部 ID 和展示名
-        available_ids = list(self.vehicle_profiles.keys())
-        display_names = [data["display_name"] for data in self.vehicle_profiles.values()]
+        available_vehicles = ProfileManager().get_available_vehicles()
+        available_ids = [v[0] for v in available_vehicles]
+        display_names = [v[1] for v in available_vehicles]
         
-        # 2. 动态默认值判定：优先读本地配置，如果没有或配置的 ID 已被废弃，则强制取字典的第一个作为默认
+        # 2. 动态默认值判定
         saved_id = self.config.get("target_vehicle")
         if saved_id not in available_ids:
             saved_id = available_ids[0] if available_ids else None
             self.config["target_vehicle"] = saved_id  # 纠正并回写
 
         # 3. 映射为 UI 需要的中文展示名
-        default_display = self.vehicle_profiles.get(saved_id, {}).get("display_name", "未知车辆") if saved_id else "无可用车辆"
+        profile_data = ProfileManager().get_profile(saved_id)
+        default_display = profile_data.get("display_name", "未知车辆") if profile_data else "无可用车辆"
         
         self.var_vehicle = ctk.StringVar(value=default_display)
         self.opt_vehicle = ctk.CTkOptionMenu(
@@ -653,8 +617,9 @@ class FH_UltimateBot(ctk.CTk):
 
     def on_vehicle_change(self, selected_display_name):
         """响应下拉框变化，记录 ID 并保存"""
-        for vid, data in self.vehicle_profiles.items():
-            if data["display_name"] == selected_display_name:
+        
+        for vid, display_name in ProfileManager().get_available_vehicles():
+            if display_name == selected_display_name:
                 self.config["target_vehicle"] = vid
                 self.save_config()
                 self.log(f"已切换目标刷取车辆为: {selected_display_name}")
@@ -695,13 +660,6 @@ class FH_UltimateBot(ctk.CTk):
         
         # 移交运行控制权给后台进程流
         self.controller.start_pipeline(start_step, self.config)
-
-        available_ids = list(self.vehicle_profiles.keys())
-        vid = self.config.get("target_vehicle")
-        if vid not in available_ids:
-            vid = available_ids[0]
-            
-        self.config["current_profile"] = self.vehicle_profiles.get(vid)
         
         self.start_time = time.monotonic()
         self.update_timer_loop()
