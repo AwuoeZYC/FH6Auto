@@ -38,7 +38,7 @@ if errorlevel 1 (
 copy /y "dist\Updater.exe" "assets\Updater.exe" >nul
 
 echo [3/4] 正在编译主程序 (%APP_NAME%.exe)...
-:: 打包主程序，并将 assets (包含刚生成的 Updater.exe) 吞进肚子里
+:: 打包主程序，并将 assets、images、config 全部吞进肚子里
 python -m PyInstaller ^
     -n "%APP_NAME%" ^
     -F ^
@@ -47,7 +47,8 @@ python -m PyInstaller ^
     "%MAIN_FILE%" ^
     --icon=assets/icon.ico ^
     --add-data "images;images" ^
-    --add-data "assets;assets"
+    --add-data "assets;assets" ^
+    --add-data "config;config"
 
 if errorlevel 1 (
     echo.

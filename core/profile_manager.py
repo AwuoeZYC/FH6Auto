@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 
 class ProfileManager:
     """车辆档案全局单例管理器，切断各模块对 UI 的数据依赖"""
@@ -10,15 +11,46 @@ class ProfileManager:
         if cls._instance is None:
             cls._instance = super(ProfileManager, cls).__new__(cls)
         return cls._instance
+    
+    def _extract_default_profile(self, target_filepath: str):
+        """核心机制：从 exe 内部临时目录释放默认的车辆 JSON 配置到外部工作区"""
+        # 判断是否是 PyInstaller 打包环境
+        if hasattr(sys, '_MEIPASS'):
+            internal_path = os.path.join(sys._MEIPASS, 'config', 'vehicle_profiles.json')
+        else:
+            # 源码运行环境兜底
+            internal_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'vehicle_profiles.json')
+            
+        internal_path = os.path.abspath(internal_path)
+        target_abs_path = os.path.abspath(target_filepath)
+
+        # 如果内部文件存在，且路径与外部不冲突（防止开发时自己覆盖自己）
+        if os.path.exists(internal_path) and internal_path != target_abs_path:
+            os.makedirs(os.path.dirname(target_abs_path), exist_ok=True)
+            try:
+                shutil.copy2(internal_path, target_abs_path)
+                print(f"✅ [自我修复] 已在本地生成默认车辆配置文件: {target_abs_path}")
+            except Exception as e:
+                print(f"⚠️ [自我修复失败] 无法释放默认配置: {e}")
 
     def load_profiles(self, filepath: str = "config/vehicle_profiles.json"):
+        # 1. 环境感知：如果外部文件不存在，尝试从 EXE 内部“吐”出一份默认配置
         if not os.path.exists(filepath):
-            # 如果文件不存在，给一个空字典兜底或抛出异常，防止程序崩溃
+            self._extract_default_profile(filepath)
+
+        # 2. 极限兜底：如果依然不存在（比如打包没带上该文件），提供空字典防止程序崩溃
+        if not os.path.exists(filepath):
+            print("🚨 严重警告: 无法加载车辆配置文件，UI 将无法渲染可选车辆！")
             self._profiles = {}
             return
 
-        with open(filepath, "r", encoding="utf-8") as f:
-            self._profiles = json.load(f)
+        # 3. 正常读取外部配置文件
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                self._profiles = json.load(f)
+        except Exception as e:
+            print(f"🚨 解析 vehicle_profiles.json 失败，请检查格式: {e}")
+            self._profiles = {}
 
     def get_profile(self, vehicle_id: str) -> dict:
         return self._profiles.get(vehicle_id, {})
