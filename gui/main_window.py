@@ -8,6 +8,9 @@ import requests
 import customtkinter as ctk
 from PIL import Image
 from core.profile_manager import ProfileManager
+from gui.windows.updater_window import UpdaterWindow
+from gui.panels.smart_planner import SmartPlannerPanel
+from gui.panels.task_config_panel import TaskConfigPanel
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -36,7 +39,7 @@ class FH_UltimateBot(ctk.CTk):
         
         # 窗口基础属性配置
         self.title(f"FH6Auto by AwuoeZYC v{CURRENT_VERSION}")
-        self.geometry("1800x800")
+        self.geometry("1800x880")
         self.attributes("-topmost", False)
         self.attributes("-alpha", 0.98)
         self.resizable(False, False)
@@ -60,30 +63,11 @@ class FH_UltimateBot(ctk.CTk):
 
         ProfileManager().load_profiles()
 
-        # 初始化应用静态默认配置
-        self.config = {
-            "target_vehicle": "Subaru_22B",
-            "race_count": 99,
-            "buy_count": 33,
-            "mastery_count": 33,
-            "remove_count": 33,
-            "chk_1": True,
-            "chk_2": True,
-            "chk_3": True,
-            "chk_4": True,
-            "next_1": 2,
-            "next_2": 3,
-            "next_3": 4,
-            "next_4": 1,
-            "global_loops": 10,
-            "skill_dirs": ["right", "up", "up", "up", "left"],
-            "share_code": "170516901",
-            "auto_restart": False,
-            "restart_cmd": "start steam://run/2483190",
-            "base_width": 1024,  
-            "base_height": 768, 
-        }
-        self.load_config()
+        # 初始化配置管理器并挂载引用
+        from core.config_manager import ConfigManager
+        self.config_mgr = ConfigManager()
+        self.config = self.config_mgr.config  # 保持兼容性，让旧的 UI 组件还能通过 self.config 访问
+
 
         # UI 组件装配与核心回调双向绑定
         self.setup_ui()
@@ -94,7 +78,6 @@ class FH_UltimateBot(ctk.CTk):
             stop_cb=self.on_controller_stopped
         )
         
-        self.update_skill_grid()
         self.center_window()
 
         # 异步预热视觉特征引擎，避免阻塞主线程渲染
@@ -138,142 +121,28 @@ class FH_UltimateBot(ctk.CTk):
         y = (sh - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
 
-    def normalize_step_entry(self, entry_widget, default_value):
-        """强制规范流水线单步转向序号输入范围为 1 至 4"""
-        try:
-            v = "".join(c for c in entry_widget.get() if c.isdigit())
-            if not v:
-                v = str(default_value)
-            iv = int(v)
-            if iv < 1: iv = 1
-            if iv > 4: iv = 4
-            entry_widget.delete(0, "end")
-            entry_widget.insert(0, str(iv))
-        except Exception:
-            entry_widget.delete(0, "end")
-            entry_widget.insert(0, str(default_value))
-
-    def on_entry_change(self, event, entry_widget, label_widget, config_key, max_len=4):
-        """通用输入框实时响应函数：过滤非数字、限制长度、实时更新标签、实时保存配置"""
-        val = "".join(c for c in entry_widget.get() if c.isdigit())
-        if len(val) > max_len: 
-            val = val[:max_len]
-            
-        if entry_widget.get() != val:
-            entry_widget.delete(0, "end")
-            entry_widget.insert(0, val)
-            
-        # 实时同步到标签显示
-        display_val = val if val else "0"
-        label_widget.configure(text=f"执行: 0 / {display_val}")
-        
-        # 实时写入内存并保存到本地
-        try:
-            self.config[config_key] = int(display_val)
-            self.save_config()
-        except ValueError:
-            pass
-
+    
     # ==========================================
     # --- 配置管理数据流 ---
     # ==========================================
-    def load_config(self):
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.config.update(data)
-            except Exception:
-                pass
-
+    
     def save_config(self):
         try:
-            self.config["race_count"] = int(self.entry_race.get())
-            self.config["buy_count"] = int(self.entry_car.get())
-            self.config["mastery_count"] = int(self.entry_mastery.get())
-            self.config["remove_count"] = int(self.entry_sc.get()) if self.entry_sc.get().isdigit() else 30
             self.config["global_loops"] = int(self.entry_global_loop.get())
-            self.config["share_code"] = "".join(c for c in self.entry_share.get() if c.isdigit())
-            self.config["next_1"] = int(self.entry_next1.get())
-            self.config["next_2"] = int(self.entry_next2.get())
-            self.config["next_3"] = int(self.entry_next3.get())
-            self.config["next_4"] = int(self.entry_next4.get())
             self.config["base_width"] = int(self.entry_base_w.get())
             self.config["base_height"] = int(self.entry_base_h.get())
         except Exception:
             pass
-
-        self.config["chk_1"] = self.var_chk1.get()
-        self.config["chk_2"] = self.var_chk2.get()
-        self.config["chk_3"] = self.var_chk3.get()
-        self.config["chk_4"] = self.var_chk4.get()
         self.config["auto_restart"] = self.var_auto_restart.get()
         self.config["restart_cmd"] = self.le_restart_cmd.get().strip()
 
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=4, ensure_ascii=False)
-        except Exception:
-            pass
+        # 让任务面板自己保存它的参数
+        if hasattr(self, 'task_panel'):
+            self.task_panel.save_current_values()
 
-    def auto_calculate_pipeline(self):
-        """根据目标 CR 金额与单车消耗，自动推演并优化大循环队列配比"""
-        val_a = self.entry_calc_a.get().strip()
-        if not val_a:
-            self.log("未输入CR目标，放弃计算。")
-            return
-            
-        try:
-            target_cr = int(val_a)
-            cost_per_car = int(self.entry_calc_b.get().strip()) if self.entry_calc_b.get().strip() else 81700
-            sp_per_car = int(self.entry_calc_c.get().strip()) if self.entry_calc_c.get().strip() else 30
-        except Exception:
-            self.log("输入解析格式错误，请确保填入纯数字。")
-            return
+        self.config_mgr.save()
 
-        if cost_per_car <= 0 or sp_per_car <= 0:
-            return
-
-        total_cars = target_cr // cost_per_car
-        total_races = (total_cars * sp_per_car) // 10
-
-        if total_races <= 0:
-            self.log(f"目标金额过低，仅需购买 {total_cars} 辆车，无需启动跑图。")
-            return
-
-        if total_races <= 99:
-            final_loops = 1
-            final_races_per_loop = total_races
-        else:
-            import math
-            loops = math.ceil(total_races / 99)
-            avg_races = total_races // loops
-            if avg_races >= 70:
-                final_loops = loops
-                final_races_per_loop = avg_races
-            else:
-                final_races_per_loop = 99
-                final_loops = total_races // 99 
-
-        cars_per_loop = (final_races_per_loop * 10) // sp_per_car
-        if final_loops <= 0:
-            return
-
-        # 将最优推导数据同步至 UI 输入组件
-        self.entry_race.delete(0, "end")
-        self.entry_race.insert(0, str(final_races_per_loop))
-        self.entry_car.delete(0, "end")
-        self.entry_car.insert(0, str(cars_per_loop))
-        self.entry_mastery.delete(0, "end")
-        self.entry_mastery.insert(0, str(cars_per_loop))
-        self.entry_sc.delete(0, "end")
-        self.entry_sc.insert(0, str(cars_per_loop))
-        self.entry_global_loop.delete(0, "end")
-        self.entry_global_loop.insert(0, str(final_loops))
-
-        self.log(f"✅ 分配器计算完成。总计需 {total_cars} 辆，共跑图 {total_races} 次。")
-        self.save_config()
-
+    
     # ==========================================
     # --- GUI 视窗布局装配 ---
     # ==========================================
@@ -281,121 +150,13 @@ class FH_UltimateBot(ctk.CTk):
         self.top_container = ctk.CTkFrame(self, fg_color="transparent")
         self.top_container.pack(fill="x", padx=18, pady=(18, 10))
 
-        self.config_frame = ctk.CTkFrame(self.top_container, fg_color="transparent")
-        self.config_frame.pack(fill="x")
-
-        def create_box(parent, title, btn_text, btn_cmd, btn_color, def_val, config_key):
-            frame = ctk.CTkFrame(parent, width=210, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
-            frame.pack_propagate(False)
-            frame.pack(side="left", padx=8)
-
-            ctk.CTkLabel(frame, text=title, font=ctk.CTkFont(weight="bold", size=20)).pack(pady=(14, 10))
-            
-            btn = ctk.CTkButton(frame, text=btn_text, fg_color=btn_color, hover_color=btn_color, command=btn_cmd, width=140, height=38, corner_radius=10)
-            btn.pack(pady=8, padx=10)
-
-            entry = ctk.CTkEntry(frame, width=95, height=34, justify="center", corner_radius=8)
-            entry.insert(0, str(def_val))
-            entry.pack(pady=8)
-
-            lbl = ctk.CTkLabel(frame, text=f"执行: 0 / {def_val}", text_color="#A0A0A0", font=ctk.CTkFont(size=16))
-            lbl.pack(pady=8)
-            
-            # 【核心】：绑定键盘松开事件，实现类似 Vue/React 的双向绑定效果
-            entry.bind("<KeyRelease>", lambda e: self.on_entry_change(e, entry, lbl, config_key))
-            
-            return frame, btn, entry, lbl
-
-        def create_next_step(parent, var_checked, def_step):
-            frame = ctk.CTkFrame(parent, width=120, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
-            frame.pack(side="left", padx=4)
-            frame.pack_propagate(False)
-
-            ctk.CTkLabel(frame, text="下一步骤", font=ctk.CTkFont(size=18, weight="bold"), text_color="#5DADE2").pack(pady=(55, 10))
-            
-            entry = ctk.CTkEntry(frame, width=60, height=34, justify="center", corner_radius=8)
-            entry.insert(0, str(def_step))
-            entry.pack(pady=6)
-
-            chk = ctk.CTkCheckBox(frame, text="继续", variable=var_checked, width=60)
-            chk.pack(pady=8)
-            return frame, entry, chk
-
-        self.var_chk1 = ctk.BooleanVar(value=self.config["chk_1"])
-        self.var_chk2 = ctk.BooleanVar(value=self.config["chk_2"])
-        self.var_chk3 = ctk.BooleanVar(value=self.config["chk_3"])
-        self.var_chk4 = ctk.BooleanVar(value=self.config.get("chk_4", True))
-
-        # 模块 1：跑图
-        box_race, self.btn_race, self.entry_race, self.lbl_race = create_box(
-            self.config_frame, "1. 循环跑图", "开始", lambda: self.ui_trigger_start("race"), "#1F6AA5", self.config["race_count"], "race_count"
+        # --- 接入任务配置面板 ---
+        self.task_panel = TaskConfigPanel(
+            self.top_container, 
+            config_mgr=self.config_mgr, 
+            on_start_callback=self.ui_trigger_start
         )
-        self.entry_share = ctk.CTkEntry(box_race, width=130, justify="center", placeholder_text="蓝图数字代码")
-        self.entry_share.insert(0, self.config["share_code"])
-        self.entry_share.pack(pady=4)
-
-        self.next_frame1, self.entry_next1, self.chk1 = create_next_step(self.config_frame, self.var_chk1, self.config.get("next_1", 2))
-
-        # 模块 2：买车
-        box_car, self.btn_car, self.entry_car, self.lbl_car = create_box(
-            self.config_frame, "2. 批量买车", "开始", lambda: self.ui_trigger_start("buy"), "#2EA043", self.config["buy_count"], "buy_count"
-        )
-
-        self.next_frame2, self.entry_next2, self.chk2 = create_next_step(self.config_frame, self.var_chk2, self.config.get("next_2", 3))
-
-        # 模块 3：熟练度加点
-        self.box_mastery = ctk.CTkFrame(self.config_frame, width=360, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
-        self.box_mastery.pack_propagate(False)
-        self.box_mastery.pack(side="left", padx=8)
-
-        top_mastery = ctk.CTkFrame(self.box_mastery, fg_color="transparent")
-        top_mastery.pack(fill="x", pady=10)
-
-        left_mastery = ctk.CTkFrame(top_mastery, fg_color="transparent")
-        left_mastery.pack(side="left", padx=10)
-
-        ctk.CTkLabel(left_mastery, text="3. 熟练度加点", font=ctk.CTkFont(weight="bold", size=20)).pack(pady=(0, 8))
-
-        self.btn_mastery = ctk.CTkButton(left_mastery, text="开始", width=120, height=38, corner_radius=10, fg_color="#8E44AD", hover_color="#8E44AD", command=lambda: self.ui_trigger_start("mastery"))
-        self.btn_mastery.pack(pady=5)
-
-        self.entry_mastery = ctk.CTkEntry(left_mastery, width=95, height=34, justify="center", corner_radius=8)
-        self.entry_mastery.insert(0, str(self.config["mastery_count"]))
-        self.entry_mastery.pack(pady=5)
-
-        self.lbl_mastery = ctk.CTkLabel(left_mastery, text=f"执行: 0 / {self.config['mastery_count']}", text_color="#A0A0A0", font=ctk.CTkFont(size=14))
-        self.lbl_mastery.pack(pady=(2, 8))
-
-        self.entry_mastery.bind("<KeyRelease>", lambda e: self.on_entry_change(e, self.entry_mastery, self.lbl_mastery, "mastery_count"))
-
-        dir_frame = ctk.CTkFrame(left_mastery, fg_color="transparent")
-        dir_frame.pack(pady=4)
-
-        for text, val in [("↑", "up"), ("↓", "down"), ("←", "left"), ("→", "right")]:
-            ctk.CTkButton(dir_frame, text=text, width=30, height=28, corner_radius=8, command=lambda x=val: self.add_skill_dir(x)).pack(side="left", padx=2)
-
-        ctk.CTkButton(left_mastery, text="清除矩阵", width=90, height=28, corner_radius=8, fg_color="#C0392B", hover_color="#A93226", command=self.clear_skill_dir).pack(pady=8)
-
-        self.grid_frame = ctk.CTkFrame(top_mastery, fg_color="transparent")
-        self.grid_frame.pack(side="right", padx=12)
-
-        self.grid_labels = [[None] * 4 for _ in range(4)]
-        for r in range(4):
-            for c in range(4):
-                lbl = ctk.CTkLabel(self.grid_frame, text="", width=28, height=28, corner_radius=5, fg_color="#444444")
-                lbl.grid(row=r, column=c, padx=4, pady=4)
-                self.grid_labels[r][c] = lbl
-        ctk.CTkLabel(self.grid_frame, text="技能树", font=ctk.CTkFont(size=14, weight="bold"), text_color="#A0A0A0").grid(row=4, column=0, columnspan=4, pady=(8, 0))
-
-        self.next_frame3, self.entry_next3, self.chk3 = create_next_step(self.config_frame, self.var_chk3, self.config.get("next_3", 4))
-
-        # 模块 4：移除车辆
-        box_sc, self.btn_sc, self.entry_sc, self.lbl_sc = create_box(
-            self.config_frame, "4. 移除车辆", "！！开始！！", lambda: self.ui_trigger_start("remove"), "#D97706", self.config.get("remove_count", 30), "remove_count"
-        )
-
-        self.entry_sc.bind("<KeyRelease>", lambda e: self.on_entry_change(e, self.entry_sc, self.lbl_sc, "remove_count"))
-        self.next_frame4, self.entry_next4, self.chk4 = create_next_step(self.config_frame, self.var_chk4, self.config.get("next_4", 1))
+        self.task_panel.pack(fill="x")
 
         self.profile_frame = ctk.CTkFrame(self, fg_color="#2B2B2B", height=45, corner_radius=10)
         self.profile_frame.pack(fill="x", padx=18, pady=(15, 0))
@@ -458,42 +219,14 @@ class FH_UltimateBot(ctk.CTk):
         self.le_restart_cmd.insert(0, self.config.get("restart_cmd", "start steam://run/2483190"))
         self.le_restart_cmd.pack(side="left", padx=(0, 20))
 
-        # 计算器栏
-        self.calc_frame = ctk.CTkFrame(self, fg_color="#2B2B2B", height=45, corner_radius=10)
-        self.calc_frame.pack(fill="x", padx=18, pady=(10, 0))
-        self.calc_frame.pack_propagate(False)
-        
-        ctk.CTkLabel(self.calc_frame, text="次数计算器", font=ctk.CTkFont(weight="bold", size=15), text_color="#2EA043").pack(side="left", padx=(15, 20))
-        ctk.CTkLabel(self.calc_frame, text="CR:").pack(side="left", padx=(0, 5))
-        
-        self.entry_calc_a = ctk.CTkEntry(self.calc_frame, width=110, height=28, placeholder_text="留空不计算")
-        self.entry_calc_a.pack(side="left", padx=(0, 15))
-        ctk.CTkLabel(self.calc_frame, text="单车成本(CR):").pack(side="left", padx=(0, 5))
-        self.entry_calc_b = ctk.CTkEntry(self.calc_frame, width=70, height=28)
-        self.entry_calc_b.insert(0, "81700")
-        self.entry_calc_b.pack(side="left", padx=(0, 15))
-        ctk.CTkLabel(self.calc_frame, text="单车技能点:").pack(side="left", padx=(0, 5))
-        self.entry_calc_c = ctk.CTkEntry(self.calc_frame, width=50, height=28)
-        self.entry_calc_c.insert(0, "30")
-        self.entry_calc_c.pack(side="left", padx=(0, 15))
-        
-        ctk.CTkButton(self.calc_frame, text="计算并应用", width=90, height=28, fg_color="#D35400", hover_color="#A04000", command=self.auto_calculate_pipeline).pack(side="left", padx=(0, 15))
+        # --- 接入智能规划面板 ---
+        self.planner_panel = SmartPlannerPanel(
+            self, 
+            config_mgr=self.config_mgr, 
+            on_sync_callback=self.sync_planner_to_ui
+        )
+        self.planner_panel.pack(fill="x", padx=18, pady=(10, 0))
 
-        # 动态绑定限制器
-        def limit_len(widget, max_l):
-            val = "".join(c for c in widget.get() if c.isdigit())
-            if len(val) > max_l: val = val[:max_l]
-            if widget.get() != val:
-                widget.delete(0, "end")
-                widget.insert(0, val)
-        self.entry_calc_a.bind("<KeyRelease>", lambda e: limit_len(self.entry_calc_a, 10))
-        self.entry_calc_b.bind("<KeyRelease>", lambda e: limit_len(self.entry_calc_b, 7))
-        self.entry_calc_c.bind("<KeyRelease>", lambda e: limit_len(self.entry_calc_c, 2))
-
-        self.entry_next1.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next1, 2))
-        self.entry_next2.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next2, 3))
-        self.entry_next3.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next3, 4))
-        self.entry_next4.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next4, 1))
 
         # 紧凑型挂机控制台（大循环开启时呈现）
         self.mini_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=10)
@@ -528,43 +261,8 @@ class FH_UltimateBot(ctk.CTk):
         self.log_box = ctk.CTkTextbox(self.bottom_frame, state="disabled", wrap="word", corner_radius=12, height=120, font=ctk.CTkFont(size=18))
         self.log_box.pack(side="left", fill="both", expand=True, padx=8)
 
-        self.btn_update = ctk.CTkButton(self, text="🔄 检查更新 / GitHub", fg_color="#2EA043", hover_color="#238636", height=42, corner_radius=12, font=ctk.CTkFont(weight="bold", size=15), command=self.open_update_window)
+        self.btn_update = ctk.CTkButton(self, text="🔄 检查更新 / GitHub", fg_color="#2EA043", hover_color="#238636", height=42, corner_radius=12, font=ctk.CTkFont(weight="bold", size=15), command=lambda: UpdaterWindow(self))
         self.btn_update.pack(fill="x", padx=18, pady=(6, 12))
-
-    # ==========================================
-    # --- 技能树参数矩阵映射 ---
-    # ==========================================
-    def add_skill_dir(self, direction):
-        self.config["skill_dirs"].append(direction)
-        self.update_skill_grid()
-        self.save_config()
-
-    def clear_skill_dir(self):
-        self.config["skill_dirs"].clear()
-        self.update_skill_grid()
-        self.save_config()
-
-    def update_skill_grid(self):
-        for r in range(4):
-            for c in range(4):
-                self.grid_labels[r][c].configure(fg_color="#333333")
-
-        curr_r, curr_c = 3, 0
-        self.grid_labels[curr_r][curr_c].configure(fg_color="#3498DB")
-        valid_dirs = []
-
-        for d in self.config["skill_dirs"]:
-            if d == "up": curr_r -= 1
-            elif d == "down": curr_r += 1
-            elif d == "left": curr_c -= 1
-            elif d == "right": curr_c += 1
-
-            if 0 <= curr_r < 4 and 0 <= curr_c < 4:
-                self.grid_labels[curr_r][curr_c].configure(fg_color="#3498DB")
-                valid_dirs.append(d)
-            else:
-                break
-        self.config["skill_dirs"] = valid_dirs
 
     # ==========================================
     # --- 控制层回调槽函数实现 ---
@@ -603,17 +301,18 @@ class FH_UltimateBot(ctk.CTk):
 
     def update_running_ui(self, task_name: str, current_val: int, max_val: int):
         self.ui_call(self.lbl_mini_task.configure, text=f"当前任务: {task_name}")
-        self.ui_call(self.lbl_mini_prog.configure, text=f"执行进度: {current_val} / {max_val}")
-        
-        # 反向同步更新主视图上的对应大计数器
+
+        display_max = "无限" if max_val == 9999 else str(max_val)
+        self.ui_call(self.lbl_mini_prog.configure, text=f"执行进度: {current_val} / {display_max}")
+
         if "跑图" in task_name:
-            self.ui_call(self.lbl_race.configure, text=f"执行: {current_val} / {max_val}")
+            self.ui_call(self.task_panel.lbl_race.configure, text=f"执行: {current_val} / {display_max}")
         elif "买车" in task_name:
-            self.ui_call(self.lbl_car.configure, text=f"执行: {current_val} / {max_val}")
-        elif "抽奖" in task_name:
-            self.ui_call(self.lbl_mastery.configure, text=f"执行: {current_val} / {max_val}")
+            self.ui_call(self.task_panel.lbl_car.configure, text=f"执行: {current_val} / {display_max}")
+        elif "加点" in task_name:
+            self.ui_call(self.task_panel.lbl_mastery.configure, text=f"执行: {current_val} / {display_max}")
         elif "移除" in task_name:
-            self.ui_call(self.lbl_sc.configure, text=f"执行: {current_val} / {max_val}")
+            self.ui_call(self.task_panel.lbl_sc.configure, text=f"执行: {current_val} / {display_max}")
 
     def update_loop_ui(self, current_loop: int, total_loops: int):
         self.ui_call(self.lbl_mini_loop.configure, text=f"大循环: {current_loop} / {total_loops}")
@@ -637,6 +336,9 @@ class FH_UltimateBot(ctk.CTk):
                 self.config["target_vehicle"] = vid
                 self.save_config()
                 self.log(f"已切换目标刷取车辆为: {selected_display_name}")
+                # 通知规划面板更新默认值
+                if hasattr(self, 'planner_panel'):
+                    self.planner_panel.load_initial_values()
                 break
     
     def ui_trigger_start(self, start_step: str):
@@ -650,10 +352,9 @@ class FH_UltimateBot(ctk.CTk):
         self.controller.base_res = (self.config["base_width"], self.config["base_height"])
 
         # 隐藏庞大的主配置操作网格
-        self.config_frame.pack_forget()
         self.profile_frame.pack_forget()
         self.global_settings_frame.pack_forget()
-        self.calc_frame.pack_forget()
+        self.planner_panel.pack_forget()
         self.top_container.pack_forget()
         self.bottom_frame.pack_forget()
         self.btn_update.pack_forget()
@@ -685,168 +386,18 @@ class FH_UltimateBot(ctk.CTk):
             
             # 按顺序线性重构标准大控制面板
             self.top_container.pack(fill="x", padx=18, pady=(18, 10))
-            self.config_frame.pack(fill="x")
             self.profile_frame.pack(fill="x", padx=18, pady=(15, 0))
-            self.global_settings_frame.pack(fill="x", pady=(15, 0))
-            self.calc_frame.pack(fill="x", pady=(10, 0))
+            self.global_settings_frame.pack(fill="x", padx=18, pady=(15, 0))
+            self.planner_panel.pack(fill="x", padx=18, pady=(10, 0))
             self.bottom_frame.pack(fill="both", expand=True, padx=18, pady=(6, 12))
             self.btn_update.pack(fill="x", padx=18, pady=(6, 12))
             
             self.attributes("-topmost", False)
-            self.geometry("1800x800")
+            self.geometry("1800x880")
             self.center_window()
             
         self.ui_call(do_restore)
 
-    # ==========================================
-    # --- 纯净版热更新模块 ---
-    # ==========================================
-    def open_update_window(self):
-        """打开纯净的检查更新窗口"""
-        if hasattr(self, "update_win") and self.update_win is not None and self.update_win.winfo_exists():
-            self.update_win.focus()
-            return
-
-        self.update_win = ctk.CTkToplevel(self)
-        self.update_win.title("检查更新")
-        self.update_win.geometry("340x220")
-        self.update_win.resizable(False, False)
-        self.update_win.transient(self)
-
-        self.update_win.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 340) // 2
-        y = self.winfo_y() + (self.winfo_height() - 220) // 2
-        self.update_win.geometry(f"+{x}+{y}")
-        
-        ctk.CTkLabel(self.update_win, text="FH6Auto 自动化更新", font=ctk.CTkFont(weight="bold", size=18), text_color="#3498DB").pack(pady=(25, 10))
-        
-        self.lbl_version = ctk.CTkLabel(self.update_win, text=f"当前版本: v{CURRENT_VERSION}", text_color="gray", font=ctk.CTkFont(size=13))
-        self.lbl_version.pack(pady=5)
-
-        def check_update_logic():
-            self.ui_call(self.lbl_version.configure, text="正在连接 GitHub...", text_color="#3498DB")
-            try:
-                # 换成你自己的 Github 仓库 API
-                api_url = "https://api.github.com/repos/AwuoeZYC/FH6Auto/releases/latest"
-                resp = requests.get(api_url, timeout=5, verify=False)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    remote_ver = data.get("tag_name", "v0.0.0").replace("v", "")
-                    
-                    if parse_version(remote_ver) > parse_version(CURRENT_VERSION):
-                        self.ui_call(self.lbl_version.configure, text=f"发现新版本 v{remote_ver}！", text_color="#2EA043")
-                        
-                        # 提取 Github Release 中的 exe 下载地址
-                        download_url = ""
-                        for asset in data.get("assets", []):
-                            if asset.get("name", "").endswith(".exe"):
-                                download_url = asset.get("browser_download_url")
-                                break
-                                
-                        if download_url:
-                            def ask_user():
-                                # 使用国内镜像加速下载
-                                proxy_url = f"https://mirror.ghproxy.com/{download_url}"
-                                from tkinter import messagebox
-                                if messagebox.askyesno("发现新版本", f"检测到新版本 v{remote_ver}\n\n是否立即下载并热更新？\n(支持断点随时取消)"):
-                                    self.start_safe_download(proxy_url, remote_ver)
-                            self.ui_call(ask_user)
-                        else:
-                            self.ui_call(self.lbl_version.configure, text="新版本未包含 exe 附件，请手动下载", text_color="#F39C12")
-                    else:
-                        self.ui_call(self.lbl_version.configure, text=f"当前已是最新版本 (v{CURRENT_VERSION})", text_color="gray")
-                else:
-                    self.ui_call(self.lbl_version.configure, text="检查更新失败：网络请求被拒", text_color="#DA3633")
-            except Exception as e:
-                error_msg = f"异常: {type(e).__name__} - {str(e)}"
-                print(f"【DEBUG 更新报错】 {error_msg}")
-                self.ui_call(self.lbl_version.configure, text=error_msg[:30], text_color="#DA3633")
-
-        btn_frame = ctk.CTkFrame(self.update_win, fg_color="transparent")
-        btn_frame.pack(pady=20)
-        ctk.CTkButton(btn_frame, text="检查更新", width=100, height=32, fg_color="#444444", hover_color="#555555", command=lambda: threading.Thread(target=check_update_logic, daemon=True).start()).pack(side="left", padx=5)
-        # 换成你自己的 Github 仓库主页
-        ctk.CTkButton(btn_frame, text="前往 GitHub", width=100, height=32, fg_color="#2EA043", hover_color="#238636", command=lambda: webbrowser.open("https://github.com/AwuoeZYC/FH6Auto")).pack(side="left", padx=5)
-
-    def start_safe_download(self, url: str, version: str):
-        """带有进度条的安全热更新下载方法，支持随时取消"""
-        dl_win = ctk.CTkToplevel(self)
-        dl_win.title(f"正在下载 v{version}")
-        dl_win.geometry("400x160")
-        dl_win.resizable(False, False)
-        dl_win.transient(self)
-        
-        dl_win.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 400) // 2
-        y = self.winfo_y() + (self.winfo_height() - 160) // 2
-        dl_win.geometry(f"+{x}+{y}")
-        
-        lbl_status = ctk.CTkLabel(dl_win, text="正在连接节点...", font=ctk.CTkFont(weight="bold"))
-        lbl_status.pack(pady=(20, 5))
-
-        progress_bar = ctk.CTkProgressBar(dl_win, width=300)
-        progress_bar.set(0)
-        progress_bar.pack(pady=5)
-
-        cancel_flag = {"is_cancelled": False}
-
-        def cancel_download():
-            cancel_flag["is_cancelled"] = True
-            dl_win.destroy()
-
-        btn_cancel = ctk.CTkButton(dl_win, text="取消下载", fg_color="#DA3633", hover_color="#B02A37", width=100, command=cancel_download)
-        btn_cancel.pack(pady=10)
-
-        def download_thread():
-            try:
-                current_exe_path = sys.executable 
-                if not current_exe_path.lower().endswith("fh6auto.exe"):
-                    self.ui_call(lbl_status.configure, text="[开发环境提示] 源码运行不支持热替换", text_color="#F39C12")
-                    return
-
-                tmp_file_path = current_exe_path + ".tmp"
-                resp = requests.get(url, stream=True, timeout=10, verify=False)
-                resp.raise_for_status()
-                total_size = int(resp.headers.get('content-length', 0))
-                
-                downloaded_size = 0
-                with open(tmp_file_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        if cancel_flag["is_cancelled"]:
-                            break
-                        if chunk:
-                            f.write(chunk)
-                            downloaded_size += len(chunk)
-                            if total_size > 0:
-                                pct = downloaded_size / total_size
-                                self.ui_call(progress_bar.set, pct)
-                                self.ui_call(lbl_status.configure, text=f"下载进度: {int(pct*100)}%")
-
-                if cancel_flag["is_cancelled"]:
-                    if os.path.exists(tmp_file_path):
-                        os.remove(tmp_file_path)
-                    return
-
-                self.ui_call(lbl_status.configure, text="下载完成！正在部署并重启...", text_color="#2EA043")
-                time.sleep(1.0)
-                self.ui_call(dl_win.destroy)
-
-                import shutil
-                from tkinter import messagebox
-                bundled_updater = get_asset_path("Updater.exe")
-                external_updater = os.path.join(os.environ.get("TEMP", "C:\\"), "FH6_Updater.exe")
-                
-                if bundled_updater and os.path.exists(bundled_updater):
-                    shutil.copy2(bundled_updater, external_updater)
-                    subprocess.Popen([external_updater, str(os.getpid()), current_exe_path, tmp_file_path], creationflags=subprocess.CREATE_NO_WINDOW)
-                    os._exit(0)
-                else:
-                    self.ui_call(messagebox.showerror, "错误", "缺少更新组件(Updater.exe)，无法热替换！")
-
-            except Exception as e:
-                print(f"【下载诊断】 {e}")
-                if not cancel_flag["is_cancelled"]:
-                    # 直接把真实的错误类型打在下载窗口上
-                    self.ui_call(lbl_status.configure, text=f"报错: {type(e).__name__} {str(e)[:20]}", text_color="#DA3633")
-
-        threading.Thread(target=download_thread, daemon=True).start()
+    def sync_planner_to_ui(self, races, buys, masteries, removes):
+        self.task_panel.sync_values(races, buys, masteries, removes)
+        self.log(f"🧠 已应用智能规划配比: {races}:{buys}:{masteries}:{removes}")

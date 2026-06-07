@@ -47,11 +47,13 @@ class RemoveTask(VehicleSelectorMixin, BaseTask):
 
     # ================= 拦截重写：判断达标 =================
     def state_car_select_scroll(self):
-        if self.current_count >= self.target_count:
+        # 如果 target_count 是 9999，视为无限模式，绕过达标检测，直到没车为止！
+        if self.target_count != 9999 and self.current_count >= self.target_count:
             self.ctx.log("🎉 移除车辆数量已达标！准备退回主菜单...")
             self.change_state("finish")
             return None
-        # 如果没达标，调用 Mixin 里的原生方法去翻页找车
+            
+        # 如果没达标，或者处于无限模式，调用 Mixin 里的原生方法去翻页找车
         super().state_car_select_scroll()
 
     # ================= 实现 Mixin 的两个钩子 =================

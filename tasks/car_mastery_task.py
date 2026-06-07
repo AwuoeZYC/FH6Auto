@@ -1,6 +1,8 @@
 import time
 from tasks.base_task import BaseTask
 from tasks.mixins import VehicleSelectorMixin
+from core.profile_manager import ProfileManager
+from core.image_utils import read_screen_number
 
 class CarMasteryTask(VehicleSelectorMixin, BaseTask):
     """
@@ -110,9 +112,61 @@ class CarMasteryTask(VehicleSelectorMixin, BaseTask):
         if pos:
             self.ctx.log("进入车辆熟练度...")
             self.ctx.interaction.game_click(pos)
-            self.change_state("check_mastery_status")
+            self.change_state("check_sp_balance")
         else:
             self.log_throttled("⏳ 等待车辆熟练度选项...")
+
+    def state_check_sp_balance(self):
+        # 强制等待 1.5 秒，确保进入熟练度界面的过渡动画彻底播放完毕，数字渲染清晰
+        if self.time_in_state < 1.5: 
+            return
+            
+        # 注意：这里的 offset_x 等参数需要你根据 icon_SP.png 和数字的实际相对位置进行微调测试
+        # 假设 icon_SP.png 在数字左边，偏移量设为宽度的粗略估值
+        current_sp = read_screen_number(
+            self.ctx, 
+            anchor_img="icon_SP.png", 
+            digit_tpl_path="num_SP_mastery_{}.png", 
+            base_offset_x=-45,  # X轴偏移：锚点向右移动多少像素开始画框
+            base_offset_y=-12, # Y轴偏移：锚点向上/下移动多少像素
+            base_roi_w=45,    # 框宽：能包住999的宽度即可
+            base_roi_h=24      # 框高：能包住数字高度即可
+        )
+        
+        if current_sp == -1:
+            if self.time_in_state > 3.0:
+                self.ctx.log("⚠️ 视觉引擎未能成功拼合 SP 余额，降级为盲点模式...")
+                self.change_state("check_mastery_status")
+            return
+            
+        target_vid = self.ctx.config.get("target_vehicle")
+        required_sp = ProfileManager().get_skill_sp(target_vid)
+        
+        self.ctx.log(f"🔍 当前账户 SP 余额 [{current_sp}]，单台需 [{required_sp}]")
+        
+        # 1. 余额不足单台消耗：硬性阻断，放弃本台车辆
+        if current_sp < required_sp:
+            self.ctx.log("🚨 SP 余额不足！放弃该车辆，并提前结束本轮批量加点任务。")
+            self.out_of_sp = True
+            self.change_state("exit_mastery")
+            return
+            
+        # 2. 余额充裕：动态下发目标规划 (仅在该任务生命周期内计算一次)
+        if not getattr(self, "sp_calculated", False):
+            max_affordable_cars = current_sp // required_sp
+            remaining_target = self.target_count - self.current_count
+            
+            # 如果算出来的可点台数，小于当前剩余的目标台数，则动态缩减目标并更新 UI
+            if max_affordable_cars < remaining_target:
+                new_target = self.current_count + max_affordable_cars
+                self.ctx.log(f"💡 智能规划：SP 仅够支撑 {max_affordable_cars} 台，下调本轮加点目标：{self.target_count} -> {new_target}")
+                self.target_count = new_target
+                self.update_progress("车辆熟练度加点") # 同步刷新右上角迷你面板
+                
+            self.sp_calculated = True
+            
+        # 检查完毕，放行至实际的技能加点流程
+        self.change_state("check_mastery_status")
 
     def state_check_mastery_status(self):
         if self.time_in_state < 1.0: return

@@ -80,42 +80,61 @@ def find_with_roi_features(ctx, anchor_image: str, features: dict, anchor_thresh
             return anchor_pos  # 找到第一个经受住所有特征验证的锚点，立即返回
 
     return None
-# def find_with_roi_features(ctx, anchor_image: str, features: dict, anchor_threshold: float = 0.8, feature_threshold: float = 0.8, padding: int = 20):
-#     """
-#     高级 ROI 复合特征检索引擎 (单目标极速最佳匹配版)
-#     利用 OpenCV 默认的全局极值检索，消除多目标遍历造成的盲区与性能损耗。
-#     """
-#     if not ctx.is_running(): 
-#         raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！")
 
-#     # 1. 回退至极速单次全屏搜索，只取全图最像的那一个锚点
-#     anchor_pos = ctx.find_image(anchor_image, threshold=anchor_threshold)
-#     if not anchor_pos:
-#         return None
+def read_screen_number(ctx, anchor_img: str, digit_tpl_path: str, base_offset_x: int, base_offset_y: int, base_roi_w: int, base_roi_h: int, threshold: float = 0.92) -> int:
+    """
+    轻量级模板匹配数字读取引擎 (附带全分辨率自适应缩放)
+    """
+    anchor_pos = ctx.find_image(anchor_img)
+    if not anchor_pos:
+        ctx.log(f"⚠️ [SP识别] 未能在当前画面中找到锚点图标 [{anchor_img}]")
+        return -1
         
-#     # 2. 计算该最佳目标的 ROI 区域
-#     try:
-#         roi_region = calculate_dynamic_roi(ctx, anchor_image, anchor_pos, padding=padding)
-#     except Exception as e:
-#         ctx.log(f"🚨 ROI计算异常跳过: {e}")
-#         return None
-
-#     # 3. 遍历特征要求字典进行三维查验
-#     for feature_img, is_required in features.items():
-#         if not ctx.is_running(): 
-#             raise BotStoppedException("🚨 视觉引擎收到 F8 停止指令！")
+    # --- 【新增】：计算全分辨率自适应缩放因子 ---
+    base_w, base_h = ctx.base_res
+    curr_w, curr_h = ctx.game_region[2], ctx.game_region[3]
+    
+    scale_x = curr_w / float(base_w)
+    scale_y = curr_h / float(base_h)
+    
+    # 将基于 1024x768 测量的“基准值”映射为当前屏幕的“物理像素真实值”
+    real_offset_x = int(base_offset_x * scale_x)
+    real_offset_y = int(base_offset_y * scale_y)
+    real_roi_w = int(base_roi_w * scale_x)
+    real_roi_h = int(base_roi_h * scale_y)
+    
+    # 2. 划定数字所在的精准 ROI 区域 (使用映射后的真实像素)
+    start_x = int(anchor_pos[0] + real_offset_x)
+    start_y = int(anchor_pos[1] + real_offset_y)
+    roi_region = (start_x, start_y, real_roi_w, real_roi_h)
+    
+    # ctx.log(f"🔍 [SP识别] 分辨率倍率: {scale_x:.2f}x. 真实划定ROI: 左上角({start_x}, {start_y}), 宽{real_roi_w}, 高{real_roi_h}")
+    
+    digits = []
+    
+    # 3. 遍历 0-9 模板，搜集 ROI 内所有的数字碎片
+    for i in range(10):
+        img_name = digit_tpl_path.format(i)
+        # 注意：寻找碎片依然在这个真实物理框里找
+        matches = ctx.find_all_images(img_name, region=roi_region, threshold=threshold)
+        
+        for match_pos in matches:
+            digits.append({'val': i, 'x': match_pos[0]})
             
-#         # 排斥特征（False）依然保持极高敏感度
-#         current_thresh = feature_threshold if is_required else max(0.6, feature_threshold - 0.15)
+    if not digits:
+        ctx.log("⚠️ [SP识别] 锚点正常，但框内未能识别出任何数字！")
+        return -1
         
-#         feat_pos = ctx.find_image(feature_img, region=roi_region, threshold=current_thresh)
-        
-#         if is_required:
-#             if not feat_pos:
-#                 return None  # 缺少必须特征，直接否定当前最佳目标
-#         else:
-#             if feat_pos:
-#                 return None  # 发现了排斥特征，直接否定当前最佳目标
-                
-#     # 4. 经受住所有特征验证，返回坐标
-#     return anchor_pos
+    # 4. 根据 X 轴坐标从左到右排序，重组为整数
+    # 增加一个小容差机制：如果两个数字靠得特别近(比如重叠了像素)，过滤掉重复识别的假阳性
+    digits.sort(key=lambda d: d['x'])
+    filtered_digits = [digits[0]]
+    for d in digits[1:]:
+        # 如果 X 轴间距大于 5 个物理像素，才认为是新的数字
+        if d['x'] - filtered_digits[-1]['x'] > 5 * scale_x:
+            filtered_digits.append(d)
+            
+    num_str = "".join([str(d['val']) for d in filtered_digits])
+    
+    # ctx.log(f"🎯 [SP识别] 碎片拼合完成！读取结果: {num_str}")
+    return int(num_str)
