@@ -93,8 +93,39 @@ class VisionEngine:
             
             # 转换为 numpy 数组。mss 默认返回 BGRA 格式，通过切片 [:, :, :3] 直接丢弃透明通道提取 BGR
             # 这比 cvtColor 快得多，且不会产生多余的内存拷贝
-            return np.array(sct_img)[:, :, :3]
-            
+            screen_bgr = np.array(sct_img)[:, :, :3]
+        
+            # ==========================================
+            # 👁️ 【终极排错快照】：每隔 10 秒保存一张引擎真实的视野
+            # ==========================================
+            if getattr(self, "debug_mode", False):
+                import time
+                import cv2
+                if not hasattr(self, "last_debug_save") or time.time() - getattr(self, "last_debug_save", 0) > 10:
+                    try:
+                        # 初始化图片轮播计数器
+                        if not hasattr(self, "debug_img_idx"):
+                            self.debug_img_idx = 1
+                            
+                        # 动态生成文件名，例如 debug_screen_snapshot_1.png
+                        filename = f"debug_screen_snapshot_{self.debug_img_idx}.png"
+                        
+                        # 保存截图
+                        cv2.imwrite(filename, screen_bgr)
+                        self.last_debug_save = time.time()
+                        self.log(f"📸 [Debug] 已保存引擎快照: {filename}")
+                        
+                        # 计数器递增，如果超过5，就回到1（轮播覆盖，防止把别人硬盘塞满）
+                        self.debug_img_idx += 1
+                        if self.debug_img_idx > 6:
+                            self.debug_img_idx = 1
+                            
+                    except Exception as save_e:
+                        pass
+            # ==========================================
+
+            return screen_bgr
+        
         except Exception as e:
             self.log(f"🚨 MSS 截图引擎异常: {e}")
             return np.array([]) # 返回空数组作为安全兜底
@@ -203,9 +234,13 @@ class VisionEngine:
                 break # 只要在某个比例下找到了符合条件的目标，就不再尝试其他比例以防重复
 
         # 欧式距离去重，防止同一个图标被返回多个密集坐标
+        # 动态获取当前模板在屏幕上实际宽度的 40% 作为去重半径。
+        # 既能完美消除同一位置的重叠噪点，又绝对不会吞掉相连的相同数字！
+        nms_radius = max(4, int(tw * sx * 0.4)) if all_matches else 10
+        
         deduped = []
         for pt in all_matches:
-            if not any(np.hypot(pt[0]-d[0], pt[1]-d[1]) < 25 for d in deduped):
+            if not any(np.hypot(pt[0]-d[0], pt[1]-d[1]) < nms_radius for d in deduped):
                 deduped.append(pt)
 
         return deduped

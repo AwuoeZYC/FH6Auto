@@ -174,6 +174,9 @@ class BotController:
         self.config = global_config
         self.global_loop_total = int(global_config.get("global_loops", 10))
         self.global_loop_current = 1
+
+        # 将 UI 配置的 debug 状态注入到没有任何状态的 VisionEngine 中
+        self.vision.debug_mode = self.config.get("debug_vision", False)
         
         success, region = GameMonitor.check_and_focus_game(self.log)
         if not success or not region:

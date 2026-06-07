@@ -70,7 +70,7 @@ class TaskConfigPanel(ctk.CTkFrame):
             entry.bind("<KeyRelease>", lambda e: self.on_entry_change(e, entry, lbl, config_key))
             return frame, btn, entry, lbl
 
-        def create_next_step(parent, var_checked, def_step):
+        def create_next_step(parent, var_checked, def_step, config_key):
             frame = ctk.CTkFrame(parent, width=120, height=300, corner_radius=12, border_width=1, border_color="#2B2B2B")
             frame.pack(side="left", padx=4)
             frame.pack_propagate(False)
@@ -80,7 +80,13 @@ class TaskConfigPanel(ctk.CTkFrame):
             entry.insert(0, str(def_step))
             entry.pack(pady=6)
 
-            chk = ctk.CTkCheckBox(frame, text="继续", variable=var_checked, width=60)
+            # 一个闭包函数，点击时立刻刷新内存并存盘
+            def on_check():
+                self.config[config_key] = var_checked.get()
+                self.config_mgr.save()
+
+            # 将 command=on_check 挂载到复选框上
+            chk = ctk.CTkCheckBox(frame, text="继续", variable=var_checked, width=60, command=on_check)
             chk.pack(pady=8)
             return frame, entry, chk
 
@@ -96,17 +102,17 @@ class TaskConfigPanel(ctk.CTkFrame):
         self.entry_share = ctk.CTkEntry(box_race, width=130, justify="center", placeholder_text="蓝图数字代码")
         self.entry_share.insert(0, self.config.get("share_code", "890169683"))
         self.entry_share.pack(pady=4)
-        self.next_frame1, self.entry_next1, _ = create_next_step(self, self.var_chk1, self.config.get("next_1", 2))
+        self.next_frame1, self.entry_next1, _ = create_next_step(self, self.var_chk1, self.config.get("next_1", 2), "chk_1")
 
         # 2: 买车
         _, _, self.entry_car, self.lbl_car = create_box(
             self, "2. 批量买车", "开始", lambda: self.on_start_callback("buy"), "#2EA043", self.config.get("buy_count", 33), "buy_count"
         )
-        self.next_frame2, self.entry_next2, _ = create_next_step(self, self.var_chk2, self.config.get("next_2", 3))
+        self.next_frame2, self.entry_next2, _ = create_next_step(self, self.var_chk2, self.config.get("next_2", 3), "chk_2")
 
         # 3: 熟练度加点
         self._build_mastery_box()
-        self.next_frame3, self.entry_next3, _ = create_next_step(self, self.var_chk3, self.config.get("next_3", 4))
+        self.next_frame3, self.entry_next3, _ = create_next_step(self, self.var_chk3, self.config.get("next_3", 4), "chk_3")
 
         # 4: 移除车辆
         box_sc, _, self.entry_sc, self.lbl_sc = create_box(
@@ -122,7 +128,7 @@ class TaskConfigPanel(ctk.CTkFrame):
         if self.var_infinite_remove.get():
             self._toggle_infinite_remove()
 
-        self.next_frame4, self.entry_next4, _ = create_next_step(self, self.var_chk4, self.config.get("next_4", 1))
+        self.next_frame4, self.entry_next4, _ = create_next_step(self, self.var_chk4, self.config.get("next_4", 1), "chk_4")
         
         self.entry_next1.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next1, 2))
         self.entry_next2.bind("<FocusOut>", lambda e: self.normalize_step_entry(self.entry_next2, 3))

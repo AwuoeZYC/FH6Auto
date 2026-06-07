@@ -134,6 +134,7 @@ class FH_UltimateBot(ctk.CTk):
         except Exception:
             pass
         self.config["auto_restart"] = self.var_auto_restart.get()
+        self.config["debug_vision"] = self.var_debug_vision.get()
         self.config["restart_cmd"] = self.le_restart_cmd.get().strip()
 
         # 让任务面板自己保存它的参数
@@ -211,8 +212,14 @@ class FH_UltimateBot(ctk.CTk):
         self.entry_base_h.pack(side="left", padx=(0, 20))
         
         self.var_auto_restart = ctk.BooleanVar(value=self.config.get("auto_restart", True))
-        self.cb_auto_restart = ctk.CTkCheckBox(self.global_settings_frame, text="游戏闪退自动重启", variable=self.var_auto_restart)
+        self.cb_auto_restart = ctk.CTkCheckBox(self.global_settings_frame, text="游戏闪退自动重启", variable=self.var_auto_restart, command=self.save_config)
         self.cb_auto_restart.pack(side="left", padx=(10, 20))
+
+        # =================视觉调试模式开关=================
+        self.var_debug_vision = ctk.BooleanVar(value=self.config.get("debug_vision", False))
+        self.cb_debug_vision = ctk.CTkCheckBox(self.global_settings_frame, text="视觉调试(保存快照)", variable=self.var_debug_vision, command=self.save_config)
+        self.cb_debug_vision.pack(side="left", padx=(0, 20))
+        # ==========================================================
         
         ctk.CTkLabel(self.global_settings_frame, text="启动命令(CMD):").pack(side="left", padx=(10, 5))
         self.le_restart_cmd = ctk.CTkEntry(self.global_settings_frame, width=250, height=28)
