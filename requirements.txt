@@ -8,3 +8,4 @@ pynput
 pillow
 pywin32
 pyinstaller
+mss
